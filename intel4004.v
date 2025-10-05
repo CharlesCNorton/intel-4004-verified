@@ -2629,7 +2629,25 @@ Proof.
     exact H0.
 Qed.
 
-(* After SRC to select RAM chip/reg/char and WRM, RDM reads the written value. *)
+Lemma get_reg_pair_bound : forall s r,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  get_reg_pair s r < 256.
+Proof.
+  intros s r Hlen Hall.
+  unfold get_reg_pair, get_reg.
+  set (r_even := r - r mod 2).
+  assert (Hrlo: nth (r_even + 1) (regs s) 0 < 16).
+  { destruct (Nat.lt_ge_cases (r_even + 1) 16).
+    - eapply nth_Forall_lt; eauto; lia.
+    - rewrite nth_overflow by lia. lia. }
+  assert (Hrhi: nth r_even (regs s) 0 < 16).
+  { destruct (Nat.lt_ge_cases r_even 16).
+    - eapply nth_Forall_lt; eauto; lia.
+    - rewrite nth_overflow by lia. lia. }
+  nia.
+Qed.
+
 Lemma wrm_then_rdm_reads_back : forall s r,
   WF s ->
   let v := acc s in
@@ -2638,9 +2656,70 @@ Lemma wrm_then_rdm_reads_back : forall s r,
   let s3 := execute s2 RDM in
   acc s3 = v.
 Proof.
-  intros s r Hwf v s1 s2 s3. subst v s1 s2 s3.
+  intros s r Hwf v s1 s2 s3.
+  subst v s1 s2 s3.
+  unfold WF in Hwf.
+  destruct Hwf as [Hregs_len Hwf_rest].
+  destruct Hwf_rest as [Hregs_all Hwf_rest].
+  destruct Hwf_rest as [Hacc Hwf_rest].
+  destruct Hwf_rest as [Hpc Hwf_rest].
+  destruct Hwf_rest as [Hstack_len Hwf_rest].
+  destruct Hwf_rest as [Hstack_all Hwf_rest].
+  destruct Hwf_rest as [Hram_len Hwf_rest].
+  destruct Hwf_rest as [Hram_all Hwf_rest].
+  destruct Hwf_rest as [Hbank Hwf_rest].
+  destruct Hwf_rest as [Hsel Hwf_rest].
+  destruct Hwf_rest as [Hrom_len Hwf_rest].
+  destruct Hwf_rest as [Hrom_all Hwf_rest].
+  destruct Hwf_rest as [Hsel_rom Hwf_rest].
+  destruct Hwf_rest as [Hrom_bytes Hrom_len2].
   unfold execute at 3. unfold execute at 2. unfold execute at 1.
-  unfold ram_read_main, ram_write_main_sys.
-  unfold get_bank, get_chip, get_regRAM, get_main, upd_main_in_reg, upd_reg_in_chip, upd_chip_in_bank, upd_bank_in_sys, nibble_of_nat.
-  simpl. reflexivity.
+  assert (Hpair: get_reg_pair s r < 256) by (apply get_reg_pair_bound; auto).
+  set (hi := get_reg_pair s r / 16) in *.
+  set (lo := get_reg_pair s r mod 16) in *.
+  set (chip := hi / 4) in *.
+  set (rno := hi mod 4) in *.
+  assert (Hhi: hi < 16) by (subst hi; apply Nat.div_lt_upper_bound; lia).
+  assert (Hlo: lo < 16) by (subst lo; apply Nat.mod_bound_pos; lia).
+  assert (Hchip: chip < 4) by (subst chip; apply Nat.div_lt_upper_bound; lia).
+  assert (Hrno: rno < 4) by (subst rno; apply Nat.mod_bound_pos; lia).
+  set (selr := mkRAMSel chip rno lo) in *.
+  set (s1 := mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
+                     (ram_sys s) (cur_bank s) selr
+                     (rom_ports s) hi (rom s) (test_pin s) (prog_pulses s)).
+  assert (Hs1_props: cur_bank s1 = cur_bank s /\ sel_ram s1 = selr /\ ram_sys s1 = ram_sys s /\ acc s1 = acc s).
+  { subst s1. simpl. auto. }
+  destruct Hs1_props as [Hs1_bank [Hs1_sel [Hs1_ram Hs1_acc]]].
+  assert (Hsel_bounds: sel_chip selr < NCHIPS /\ sel_reg selr < NREGS /\ sel_char selr < NMAIN).
+  { subst selr. simpl. unfold NCHIPS, NREGS, NMAIN. split; [|split]; lia. }
+  destruct Hsel_bounds as [Hsel_chip [Hsel_reg Hsel_char]].
+  set (s2 := mkState (acc s1) (regs s1) (carry s1) (pc_inc1 s1) (stack s1)
+                     (ram_write_main_sys s1 (acc s1)) (cur_bank s1) (sel_ram s1)
+                     (rom_ports s1) (sel_rom s1) (rom s1) (test_pin s1) (prog_pulses s1)).
+  assert (Hs1_WF: WF s1).
+  { subst s1 selr. unfold WF. simpl.
+    split. exact Hregs_len.
+    split. exact Hregs_all.
+    split. exact Hacc.
+    split. { unfold pc_inc1. apply addr12_bound. }
+    split. exact Hstack_len.
+    split. exact Hstack_all.
+    split. exact Hram_len.
+    split. exact Hram_all.
+    split. exact Hbank.
+    split. { unfold WF_sel. simpl. unfold NCHIPS, NREGS, NMAIN. split; [|split]; lia. }
+    split. exact Hrom_len.
+    split. exact Hrom_all.
+    split. { simpl. lia. }
+    split. exact Hrom_bytes.
+    exact Hrom_len2. }
+  assert (Heq: ram_read_main s2 = nibble_of_nat (acc s1)).
+  { subst s2. apply ram_write_then_read_main.
+    - exact Hs1_WF.
+    - rewrite Hs1_bank. exact Hbank.
+    - rewrite Hs1_sel. exact Hsel_chip.
+    - rewrite Hs1_sel. exact Hsel_reg.
+    - rewrite Hs1_sel. exact Hsel_char. }
+  rewrite Heq. rewrite Hs1_acc.
+  unfold nibble_of_nat. rewrite Nat.mod_small by lia. reflexivity.
 Qed.
