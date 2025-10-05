@@ -2511,6 +2511,218 @@ Theorem step_deterministic : forall s s1 s2,
   s1 = step s -> s2 = step s -> s1 = s2.
 Proof. congruence. Qed.
 
+Lemma pc_shape_nop : forall s, pc (execute s NOP) = addr12_of_nat (pc s + 1).
+Proof. intros. unfold execute. unfold pc_inc1. reflexivity. Qed.
+
+Lemma pc_shape_jun : forall s a, pc (execute s (JUN a)) = a.
+Proof. intros. unfold execute. reflexivity. Qed.
+
+Lemma pc_shape_jms : forall s a, pc (execute s (JMS a)) = a.
+Proof. intros. unfold execute. reflexivity. Qed.
+
+Lemma pc_shape_fim : forall s r d, pc (execute s (FIM r d)) = addr12_of_nat (pc s + 2).
+Proof. intros. unfold execute. unfold pc_inc2. reflexivity. Qed.
+
+Lemma page_base_eq_page_times_256 : forall a,
+  page_base a = page_of a * 256.
+Proof. intros. unfold page_base. reflexivity. Qed.
+
+Lemma pc_shape_jin : forall s r,
+  pc (execute s (JIN r)) = addr12_of_nat (page_of (pc_inc1 s) * 256 + get_reg_pair s r mod 256).
+Proof. intros. unfold execute. reflexivity. Qed.
+
+Lemma jin_pc_in_page_range : forall s r,
+  exists off, off < 256 /\ pc (execute s (JIN r)) = addr12_of_nat (page_base (pc_inc1 s) + off).
+Proof.
+  intros. exists (get_reg_pair s r mod 256).
+  split.
+  - apply Nat.mod_upper_bound. lia.
+  - rewrite pc_shape_jin. rewrite page_base_eq_page_times_256. reflexivity.
+Qed.
+
+Lemma pc_shape_isz_zero : forall s r off,
+  nibble_of_nat (get_reg s r + 1) = 0 ->
+  pc (execute s (ISZ r off)) = addr12_of_nat (pc s + 2).
+Proof.
+  intros. unfold execute. rewrite H. unfold pc_inc2. reflexivity.
+Qed.
+
+Lemma pc_shape_isz_nonzero : forall s r off,
+  nibble_of_nat (get_reg s r + 1) <> 0 ->
+  pc (execute s (ISZ r off)) = addr12_of_nat (page_base (pc_inc2 s) + off).
+Proof.
+  intros. unfold execute.
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0) eqn:E.
+  - apply Nat.eqb_eq in E. contradiction.
+  - reflexivity.
+Qed.
+
+Lemma pc_shape_bbl_some : forall s d addr s1,
+  pop_stack s = (Some addr, s1) ->
+  pc (execute s (BBL d)) = addr.
+Proof. intros. unfold execute. rewrite H. reflexivity. Qed.
+
+Lemma pc_shape_bbl_none : forall s d s1,
+  pop_stack s = (None, s1) ->
+  pc (execute s (BBL d)) = addr12_of_nat (pc s + 1).
+Proof. intros. unfold execute. rewrite H. unfold pc_inc1. reflexivity. Qed.
+
+Lemma stack_addr_bound : forall s addr s1,
+  WF s ->
+  pop_stack s = (Some addr, s1) ->
+  addr < 4096.
+Proof.
+  intros s addr s1 Hwf Hpop.
+  unfold WF in Hwf.
+  destruct Hwf as [_ [_ [_ [_ [_ [Hstack_all _]]]]]].
+  unfold pop_stack in Hpop.
+  destruct (stack s) as [|a rest] eqn:E.
+  - discriminate.
+  - inversion Hpop; subst. simpl in Hstack_all.
+    inversion Hstack_all; subst. assumption.
+Qed.
+
+Lemma execute_pc_bounded : forall s i,
+  instr_wf i ->
+  WF s ->
+  pc (execute s i) = addr12_of_nat (pc s + 1) \/
+  pc (execute s i) = addr12_of_nat (pc s + 2) \/
+  (exists off, off < 256 /\ pc (execute s i) = addr12_of_nat (page_base (pc_inc1 s) + off)) \/
+  (exists off, off < 256 /\ pc (execute s i) = addr12_of_nat (page_base (pc_inc2 s) + off)) \/
+  (exists a, pc (execute s i) = a /\ a < 4096).
+Proof.
+  intros s i Hwf_i Hwf_s.
+  destruct i.
+
+  - left. apply pc_shape_nop.
+
+  - destruct Hwf_i as [Hc Ha].
+    unfold execute.
+    set (c1 := n / 8).
+    set (c2 := (n / 4) mod 2).
+    set (c3 := (n / 2) mod 2).
+    set (c4 := n mod 2).
+    set (base_cond := orb (andb (acc s =? 0) (c2 =? 1))
+                          (orb (andb (carry s) (c3 =? 1))
+                               (andb (negb (test_pin s)) (c4 =? 1)))).
+    set (jump := if c1 =? 1 then negb base_cond else base_cond).
+    destruct jump.
+    + right. right. right. left.
+      exists b. split.
+      * exact Ha.
+      * unfold base_for_next2, page_base, page_of, pc_inc2. reflexivity.
+    + right. left. unfold pc_inc2. reflexivity.
+
+  - right. left. apply pc_shape_fim.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - right. right. left.
+    apply jin_pc_in_page_range.
+
+  - right. right. right. right.
+    exists a. split.
+    + apply pc_shape_jun.
+    + exact Hwf_i.
+
+  - right. right. right. right.
+    exists a. split.
+    + apply pc_shape_jms.
+    + exact Hwf_i.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - destruct Hwf_i as [Hr Hb].
+    unfold execute.
+    remember (nibble_of_nat (get_reg s n + 1)) as new_val.
+    destruct (new_val =? 0) eqn:E.
+    + right. left. unfold pc_inc2. reflexivity.
+    + right. right. right. left.
+      exists b. split.
+      * exact Hb.
+      * unfold base_for_next2, page_base, page_of, pc_inc2. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - unfold execute.
+    destruct (pop_stack s) as [[addr|] s'] eqn:Epop.
+    + right. right. right. right.
+      exists addr. split.
+      * reflexivity.
+      * eapply stack_addr_bound; eauto.
+    + left. unfold pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+
+  - left. unfold execute, pc_inc1. reflexivity.
+Qed.
+
 Theorem step_pc_shape :
   forall s,
   WF s ->
@@ -2723,3 +2935,4 @@ Proof.
   rewrite Heq. rewrite Hs1_acc.
   unfold nibble_of_nat. rewrite Nat.mod_small by lia. reflexivity.
 Qed.
+    
