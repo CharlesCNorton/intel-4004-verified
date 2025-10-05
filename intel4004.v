@@ -98,6 +98,21 @@ Proof.
   - assumption.
 Qed.
 
+Lemma nth_update_nth_eq : forall A (l : list A) n x d,
+  n < length l ->
+  nth n (update_nth n x l) d = x.
+Proof.
+  intros A l n x d Hn.
+  unfold update_nth.
+  assert (Hlt: n <? length l = true) by (apply Nat.ltb_lt; exact Hn).
+  rewrite Hlt.
+  rewrite app_nth2.
+  - rewrite firstn_length_le by lia.
+    replace (n - n) with 0 by lia.
+    simpl. reflexivity.
+  - rewrite firstn_length_le by lia. lia.
+Qed.
+
 Lemma nth_Forall_lt : forall (l:list nat) d n k,
   Forall (fun x => x < k) l -> d < k -> nth n l d < k.
 Proof.
@@ -1601,6 +1616,113 @@ Proof.
   - eapply Forall_update_nth; eauto.
 Qed.
 
+(* ==================== RAM read-after-write lemmas =================== *)
+
+Lemma get_main_upd_main_in_reg : forall rg i v,
+  WF_reg rg ->
+  i < NMAIN ->
+  get_main (upd_main_in_reg rg i v) i = nibble_of_nat v.
+Proof.
+  intros rg i v [Hlen_main _] Hi.
+  unfold get_main, upd_main_in_reg. simpl.
+  rewrite nth_update_nth_eq by lia.
+  reflexivity.
+Qed.
+
+Lemma get_regRAM_upd_reg_in_chip : forall ch r rg,
+  WF_chip ch ->
+  r < NREGS ->
+  get_regRAM (upd_reg_in_chip ch r rg) r = rg.
+Proof.
+  intros ch r rg [Hlen _] Hr.
+  unfold get_regRAM, upd_reg_in_chip. simpl.
+  rewrite nth_update_nth_eq by lia.
+  reflexivity.
+Qed.
+
+Lemma get_chip_upd_chip_in_bank : forall bk c ch,
+  WF_bank bk ->
+  c < NCHIPS ->
+  get_chip (upd_chip_in_bank bk c ch) c = ch.
+Proof.
+  intros bk c ch [Hlen _] Hc.
+  unfold get_chip, upd_chip_in_bank. simpl.
+  rewrite nth_update_nth_eq by lia.
+  reflexivity.
+Qed.
+
+Lemma get_bank_upd_bank_in_sys : forall s b bk,
+  WF s ->
+  b < NBANKS ->
+  get_bank (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+                     (upd_bank_in_sys s b bk) (cur_bank s) (sel_ram s)
+                     (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s))
+           b = bk.
+Proof.
+  intros s b bk [_ [_ [_ [_ [_ [_ [Hsys_len _]]]]]]] Hb.
+  unfold get_bank, upd_bank_in_sys. simpl.
+  rewrite nth_update_nth_eq by lia.
+  reflexivity.
+Qed.
+
+Lemma WF_bank_from_sys : forall s b,
+  WF s ->
+  b < NBANKS ->
+  WF_bank (get_bank s b).
+Proof.
+  intros s b Hwf Hb.
+  destruct Hwf as [_ [_ [_ [_ [_ [_ [Hlen [Hforall _]]]]]]]].
+  rewrite Forall_forall in Hforall.
+  apply Hforall. eapply nth_In. lia.
+Qed.
+
+Lemma WF_chip_from_bank : forall bk c,
+  WF_bank bk ->
+  c < NCHIPS ->
+  WF_chip (get_chip bk c).
+Proof.
+  intros bk c [Hlen Hforall] Hc.
+  rewrite Forall_forall in Hforall.
+  apply Hforall. eapply nth_In. lia.
+Qed.
+
+Lemma WF_reg_from_chip : forall ch r,
+  WF_chip ch ->
+  r < NREGS ->
+  WF_reg (get_regRAM ch r).
+Proof.
+  intros ch r [Hlen [Hforall _]] Hr.
+  rewrite Forall_forall in Hforall.
+  apply Hforall. eapply nth_In. lia.
+Qed.
+
+Lemma ram_write_then_read_main : forall s v,
+  WF s ->
+  cur_bank s < NBANKS ->
+  sel_chip (sel_ram s) < NCHIPS ->
+  sel_reg (sel_ram s) < NREGS ->
+  sel_char (sel_ram s) < NMAIN ->
+  ram_read_main (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+                          (ram_write_main_sys s v) (cur_bank s) (sel_ram s)
+                          (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s))
+  = nibble_of_nat v.
+Proof.
+  intros s v Hwf Hb Hc Hr Hi.
+  unfold ram_read_main, ram_write_main_sys. simpl.
+  rewrite get_bank_upd_bank_in_sys; [|assumption|assumption].
+  rewrite get_chip_upd_chip_in_bank.
+  - rewrite get_regRAM_upd_reg_in_chip.
+    + apply get_main_upd_main_in_reg; [|assumption].
+      apply WF_reg_from_chip; [|assumption].
+      apply WF_chip_from_bank; [|assumption].
+      apply WF_bank_from_sys; assumption.
+    + apply WF_chip_from_bank; [|assumption].
+      apply WF_bank_from_sys; assumption.
+    + assumption.
+  - apply WF_bank_from_sys; assumption.
+  - assumption.
+Qed.
+
 (* ====================== Execute preserves WF ======================== *)
 
 (* Helper lemma: opcode 0 (NOP) is always True *)
@@ -2028,12 +2150,201 @@ Proof.
   rewrite H; trivial.
 Qed.
 
-(* Prove that decoded instructions satisfy instr_wf *)
+Lemma decode_wf_opcode_0 : forall b1 b2,
+  b1 / 16 = 0 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. exact I.
+Qed.
+
+Lemma decode_wf_opcode_1 : forall b1 b2,
+  b1 / 16 = 1 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf. split.
+  apply mod_16_lt. assumption.
+Qed.
+
+Lemma decode_wf_opcode_2 : forall b1 b2,
+  b1 / 16 = 2 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H.
+  destruct ((b1 mod 16) mod 2 =? 0) eqn:E.
+  - apply decode_FIM_wf.
+    + apply mod_16_lt.
+    + apply mod2_eq_iff. exact E.
+    + exact H0.
+  - apply decode_SRC_wf.
+    + apply mod_16_lt.
+    + apply mod2_neq_iff. exact E.
+Qed.
+
+Lemma decode_wf_opcode_3 : forall b1 b2,
+  b1 / 16 = 3 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H.
+  destruct ((b1 mod 16) mod 2 =? 0) eqn:E.
+  - apply decode_FIN_wf.
+    + apply mod_16_lt.
+    + apply mod2_eq_iff. exact E.
+  - apply decode_JIN_wf.
+    + apply mod_16_lt.
+    + apply mod2_neq_iff. exact E.
+Qed.
+
+Lemma decode_wf_opcode_4 : forall b1 b2,
+  b1 / 16 = 4 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply addr12_bound.
+Qed.
+
+Lemma decode_wf_opcode_5 : forall b1 b2,
+  b1 / 16 = 5 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply addr12_bound.
+Qed.
+
+Lemma decode_wf_opcode_6 : forall b1 b2,
+  b1 / 16 = 6 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_7 : forall b1 b2,
+  b1 / 16 = 7 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf. split.
+  apply mod_16_lt. assumption.
+Qed.
+
+Lemma decode_wf_opcode_8 : forall b1 b2,
+  b1 / 16 = 8 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_9 : forall b1 b2,
+  b1 / 16 = 9 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_10 : forall b1 b2,
+  b1 / 16 = 10 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_11 : forall b1 b2,
+  b1 / 16 = 11 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_12 : forall b1 b2,
+  b1 / 16 = 12 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_13 : forall b1 b2,
+  b1 / 16 = 13 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H. simpl. unfold instr_wf.
+  apply mod_16_lt.
+Qed.
+
+Lemma decode_wf_opcode_14 : forall b1 b2,
+  b1 / 16 = 14 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H.
+  destruct (b1 mod 16) as [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|m]]]]]]]]]]]]]]]; simpl;
+    unfold instr_wf; try exact I.
+  destruct m; exact I.
+Qed.
+
+Lemma decode_wf_opcode_15 : forall b1 b2,
+  b1 / 16 = 15 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode. rewrite H.
+  destruct (b1 mod 16) as [|[|[|[|[|[|[|[|[|[|[|[|[|[|m]]]]]]]]]]]]]]; simpl;
+    unfold instr_wf; exact I.
+Qed.
+
+Lemma decode_wf_opcode_ge_16 : forall b1 b2,
+  b1 / 16 >= 16 -> b2 < 256 -> instr_wf (decode b1 b2).
+Proof.
+  intros. unfold decode.
+  destruct (b1 / 16); try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; try lia.
+  destruct n; unfold instr_wf; exact I.
+Qed.
+
+Lemma b1_div_16_lt_16 : forall b1, b1 < 256 -> b1 / 16 < 16.
+Proof.
+  intros. apply Nat.div_lt_upper_bound. lia. lia.
+Qed.
+
 Lemma decode_instr_wf : forall b1 b2,
   b1 < 256 -> b2 < 256 ->
   instr_wf (decode b1 b2).
 Proof.
-Admitted.
+  intros b1 b2 Hb1 Hb2.
+  assert (Hdiv: b1 / 16 < 16) by (apply b1_div_16_lt_16; assumption).
+  destruct (b1 / 16) eqn:E.
+  - apply decode_wf_opcode_0; assumption.
+  - destruct n as [|n1].
+    + apply decode_wf_opcode_1; assumption.
+    + destruct n1 as [|n2].
+      * apply decode_wf_opcode_2; assumption.
+      * destruct n2 as [|n3].
+        ** apply decode_wf_opcode_3; assumption.
+        ** destruct n3 as [|n4].
+           *** apply decode_wf_opcode_4; assumption.
+           *** destruct n4 as [|n5].
+               **** apply decode_wf_opcode_5; assumption.
+               **** destruct n5 as [|n6].
+                    ***** apply decode_wf_opcode_6; assumption.
+                    ***** destruct n6 as [|n7].
+                          ****** apply decode_wf_opcode_7; assumption.
+                          ****** destruct n7 as [|n8].
+                                 ******* apply decode_wf_opcode_8; assumption.
+                                 ******* destruct n8 as [|n9].
+                                         ******** apply decode_wf_opcode_9; assumption.
+                                         ******** destruct n9 as [|n10].
+                                                  ********* apply decode_wf_opcode_10; assumption.
+                                                  ********* destruct n10 as [|n11].
+                                                            ********** apply decode_wf_opcode_11; assumption.
+                                                            ********** destruct n11 as [|n12].
+                                                                       *********** apply decode_wf_opcode_12; assumption.
+                                                                       *********** destruct n12 as [|n13].
+                                                                                   ************ apply decode_wf_opcode_13; assumption.
+                                                                                   ************ destruct n13 as [|n14].
+                                                                                                ************* apply decode_wf_opcode_14; assumption.
+                                                                                                ************* destruct n14 as [|n15].
+                                                                                                              ************** apply decode_wf_opcode_15; assumption.
+                                                                                                              ************** lia.
+Qed.
 
 (* Helper lemmas for execute_preserves_WF *)
 
@@ -2064,12 +2375,6 @@ Qed.
 Theorem execute_preserves_WF :
   forall s i, WF s -> instr_wf i -> WF (execute s i).
 Proof.
-  intros s i HWF Hiwf.
-  destruct i; simpl.
-  - (* NOP *)
-    apply execute_NOP_preserves_WF; assumption.
-  - (* JCN *)
-admit.
 Admitted.
 
 Theorem step_preserves_WF : forall s, WF s -> WF (step s).
@@ -2216,45 +2521,29 @@ Theorem step_pc_shape :
   (exists off, off < 256 /\ pc s' = addr12_of_nat (page_base (pc_inc2 s) + off)) \/
   (exists a, pc s' = a /\ (a < 4096)).
 Proof.
-  intros s Hwf. unfold step.
-  set (b1 := fetch_byte s (pc s)).
-  set (b2 := fetch_byte s (addr12_of_nat (pc s + 1))).
-  remember (decode b1 b2) as I.
-  destruct I; simpl; try (left; reflexivity).
-  - (* JCN cond b *)
-    destruct (if n / 8 =? 1
-              then
-               negb
-                 (orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
-                      (orb (andb (carry s) ((n / 2) mod 2 =? 1))
-                           (andb (negb (test_pin s)) (n mod 2 =? 1))))
-              else
-               orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
-                   (orb (andb (carry s) ((n / 2) mod 2 =? 1))
-                        (andb (negb (test_pin s)) (n mod 2 =? 1)))) eqn:Ej.
-    + right; right; right; left. exists b. split.
-      * (* b < 256 - this needs decode_instr_wf to be proven *)
-        assert (b < 256) by admit. exact H.
-      * admit. (* Needs proper handling of condition evaluation *)
-    + right; left. admit. (* Needs proper handling of condition evaluation *)
-  - (* FIM *) right; left. reflexivity.
-  - (* SRC *) left. admit.
-  - (* FIN *) left. admit.
-  - (* JIN r *) right; right; left.
-admit.
 Admitted.
 
 (* --- Frames (no unintended writes) --- *)
 
+Lemma pop_stack_preserves_regs : forall s opt s',
+  pop_stack s = (opt, s') -> regs s' = regs s.
+Proof.
+  intros s opt s' H.
+  unfold pop_stack in H.
+  destruct (stack s) as [|a rest] eqn:E.
+  - inversion H; subst. reflexivity.
+  - inversion H; subst. reflexivity.
+Qed.
+
 Definition writes_regs (i:Instruction) : bool :=
   match i with
-  | XCH _ | INC _ | FIM _ _ | FIN _ | LD _ | LDM _ => true
+  | XCH _ | INC _ | FIM _ _ | FIN _ | ISZ _ _ => true
   | _ => false
   end.
 
 Definition writes_ram (i:Instruction) : bool :=
   match i with
-  | WRM | WR0 | WR1 | WR2 | WR3 => true
+  | WRM | WMP | WR0 | WR1 | WR2 | WR3 => true
   | _ => false
   end.
 
@@ -2262,15 +2551,39 @@ Lemma execute_regs_frame : forall s i,
   writes_regs i = false ->
   regs (execute s i) = regs s.
 Proof.
-  intros s i H. destruct i; simpl in H; try reflexivity; try discriminate.
-Admitted.
+  intros s i H.
+  destruct i; simpl in H; try discriminate; unfold execute; fold execute;
+  try reflexivity.
+  - set (c1 := n / 8).
+    set (c2 := (n / 4) mod 2).
+    set (c3 := (n / 2) mod 2).
+    set (c4 := n mod 2).
+    set (base_cond := orb (andb (acc s =? 0) (c2 =? 1)) (orb (andb (carry s) (c3 =? 1)) (andb (negb (test_pin s)) (c4 =? 1)))).
+    set (jump := if c1 =? 1 then negb base_cond else base_cond).
+    destruct jump; reflexivity.
+  - destruct (pop_stack s) as [[a_opt|] s'] eqn:Epop.
+    + rewrite (pop_stack_preserves_regs s (Some a_opt) s' Epop). reflexivity.
+    + rewrite (pop_stack_preserves_regs s None s' Epop). reflexivity.
+Qed.
 
 Lemma execute_ram_frame : forall s i,
   writes_ram i = false ->
   ram_sys (execute s i) = ram_sys s.
 Proof.
-  intros s i H. destruct i; simpl in H; try reflexivity; try discriminate.
-Admitted.
+  intros s i H.
+  destruct i; simpl in H; try discriminate; unfold execute; fold execute;
+  try reflexivity.
+  - set (c1 := n / 8).
+    set (c2 := (n / 4) mod 2).
+    set (c3 := (n / 2) mod 2).
+    set (c4 := n mod 2).
+    set (base_cond := orb (andb (acc s =? 0) (c2 =? 1)) (orb (andb (carry s) (c3 =? 1)) (andb (negb (test_pin s)) (c4 =? 1)))).
+    set (jump := if c1 =? 1 then negb base_cond else base_cond).
+    destruct jump; reflexivity.
+  - set (new_val := nibble_of_nat (get_reg s n + 1)).
+    destruct (new_val =? 0); reflexivity.
+  - destruct (pop_stack s) as [[?|] ?]; reflexivity.
+Qed.
 
 (* --- KBP mapping & TEST note --- *)
 
@@ -2292,8 +2605,29 @@ Lemma src_wrr_updates_rom_port : forall s r,
   let s2 := execute s1 WRR in
   nth P (rom_ports s2) 0 = acc s.
 Proof.
-  intros s r Hwf pair P s1 s2. subst pair P s1 s2. simpl.
-Admitted.
+  intros s r Hwf pair P s1 s2.
+  subst pair P s1 s2.
+  unfold execute at 2. fold execute.
+  unfold execute at 1. fold execute.
+  simpl rom_ports.
+  rewrite nth_update_nth_eq.
+  - unfold execute. fold execute. simpl. unfold nibble_of_nat.
+    rewrite Nat.mod_small by (destruct Hwf as [_ [_ [Hacc _]]]; exact Hacc).
+    reflexivity.
+  - destruct Hwf as [Hregs_len [Hregs_forall [_ [_ [_ [_ [_ [_ [_ [_ [Hlen _]]]]]]]]]]].
+    rewrite Hlen.
+    assert (get_reg_pair s r < 256).
+    { unfold get_reg_pair.
+      set (r_even := r - r mod 2).
+      assert (get_reg s r_even < 16) by (eapply nth_Forall_lt; eauto; lia).
+      assert (get_reg s (r_even + 1) < 16) by (eapply nth_Forall_lt; eauto; lia).
+      unfold get_reg in *.
+      assert (H1: nth r_even (regs s) 0 * 16 < 16 * 16) by nia.
+      assert (H2: nth (r_even + 1) (regs s) 0 < 16) by assumption.
+      nia. }
+    assert (get_reg_pair s r / 16 < 16) by (apply Nat.div_lt_upper_bound; lia).
+    exact H0.
+Qed.
 
 (* After SRC to select RAM chip/reg/char and WRM, RDM reads the written value. *)
 Lemma wrm_then_rdm_reads_back : forall s r,
@@ -2305,4 +2639,8 @@ Lemma wrm_then_rdm_reads_back : forall s r,
   acc s3 = v.
 Proof.
   intros s r Hwf v s1 s2 s3. subst v s1 s2 s3.
-Admitted.
+  unfold execute at 3. unfold execute at 2. unfold execute at 1.
+  unfold ram_read_main, ram_write_main_sys.
+  unfold get_bank, get_chip, get_regRAM, get_main, upd_main_in_reg, upd_reg_in_chip, upd_chip_in_bank, upd_bank_in_sys, nibble_of_nat.
+  simpl. reflexivity.
+Qed.
