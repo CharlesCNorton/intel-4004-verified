@@ -2372,10 +2372,1465 @@ Proof.
 Qed.
 
 
+Lemma execute_NOP_WF : forall s, WF s -> WF (execute s NOP).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_LDM_WF : forall s n, WF s -> instr_wf (LDM n) -> WF (execute s (LDM n)).
+Proof.
+  intros s n HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_LD_WF : forall s r, WF s -> instr_wf (LD r) -> WF (execute s (LD r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. eapply nth_Forall_lt; eauto; lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_XCH_WF : forall s r, WF s -> instr_wf (XCH r) -> WF (execute s (XCH r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := set_reg s r (acc s)).
+  assert (Hs1_len: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_preserves_length. assumption. }
+  assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
+  { subst s1. apply set_reg_preserves_Forall16. assumption. }
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. eapply nth_Forall_lt; eauto; lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_INC_WF : forall s r, WF s -> instr_wf (INC r) -> WF (execute s (INC r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := set_reg s r (nibble_of_nat (get_reg s r + 1))).
+  assert (Hs1_len: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_preserves_length. assumption. }
+  assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
+  { subst s1. apply set_reg_preserves_Forall16. assumption. }
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_ADD_WF : forall s r, WF s -> instr_wf (ADD r) -> WF (execute s (ADD r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_SUB_WF : forall s r, WF s -> instr_wf (SUB r) -> WF (execute s (SUB r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_IAC_WF : forall s, WF s -> WF (execute s IAC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_DAC_WF : forall s, WF s -> WF (execute s DAC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_CLC_WF : forall s, WF s -> WF (execute s CLC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_STC_WF : forall s, WF s -> WF (execute s STC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_CMC_WF : forall s, WF s -> WF (execute s CMC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_CMA_WF : forall s, WF s -> WF (execute s CMA).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_CLB_WF : forall s, WF s -> WF (execute s CLB).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RAL_WF : forall s, WF s -> WF (execute s RAL).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RAR_WF : forall s, WF s -> WF (execute s RAR).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_TCC_WF : forall s, WF s -> WF (execute s TCC).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. destruct (carry s); lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_TCS_WF : forall s, WF s -> WF (execute s TCS).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. destruct (carry s); lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_DAA_WF : forall s, WF s -> WF (execute s DAA).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_KBP_WF : forall s, WF s -> WF (execute s KBP).
+Proof.
+  intros s HWF. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split.
+    { assert (H: acc s < 16) by exact Hacc.
+      destruct (acc s) eqn:E; simpl; [lia|].
+      destruct n eqn:E1; simpl; [lia|].
+      destruct n0 eqn:E2; simpl; [lia|].
+      destruct n1 eqn:E3; simpl; [lia|].
+      destruct n2 eqn:E4; simpl; [lia|].
+      destruct n3 eqn:E5; simpl; [lia|].
+      destruct n4 eqn:E6; simpl; [lia|].
+      destruct n5 eqn:E7; simpl; [lia|].
+      destruct n6 eqn:E8; simpl; [lia|].
+      destruct n7 eqn:E9; simpl; [lia|].
+      destruct n8 eqn:E10; simpl; [lia|].
+      destruct n9 eqn:E11; simpl; [lia|].
+      destruct n10 eqn:E12; simpl; [lia|].
+      destruct n11 eqn:E13; simpl; [lia|].
+      destruct n12 eqn:E14; simpl; [lia|].
+      subst. simpl in H. lia. }
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_JUN_WF : forall s a, WF s -> instr_wf (JUN a) -> WF (execute s (JUN a)).
+Proof.
+  intros s a HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. exact Hwfi.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma get_reg_pair_bound_helper : forall s r,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  get_reg_pair s r < 256.
+Proof.
+  intros s r Hlen Hall.
+  unfold get_reg_pair, get_reg.
+  set (r_even := r - r mod 2).
+  assert (Hrlo: nth (r_even + 1) (regs s) 0 < 16).
+  { destruct (Nat.lt_ge_cases (r_even + 1) 16).
+    - eapply nth_Forall_lt; eauto; lia.
+    - rewrite nth_overflow by lia. lia. }
+  assert (Hrhi: nth r_even (regs s) 0 < 16).
+  { destruct (Nat.lt_ge_cases r_even 16).
+    - eapply nth_Forall_lt; eauto; lia.
+    - rewrite nth_overflow by lia. lia. }
+  nia.
+Qed.
+
+Lemma execute_JMS_WF : forall s a, WF s -> instr_wf (JMS a) -> WF (execute s (JMS a)).
+Proof.
+  intros s a HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := push_stack s (addr12_of_nat (pc s + 2))).
+  assert (Hs1_len: length (stack s1) <= 3).
+  { subst s1. apply push_stack_len_le3. }
+  assert (Hs1_for: Forall (fun x => x < 4096) (stack s1)).
+  { subst s1. unfold push_stack. simpl.
+    assert (HF := HstkFor).
+    destruct (stack s) as [|h1 [|h2 [|h3 t]]]; simpl.
+    - constructor; [apply addr12_bound | constructor].
+    - inversion HF; subst.
+      constructor; [apply addr12_bound | constructor; auto].
+    - inversion HF; subst.
+      inversion H2; subst.
+      constructor; [apply addr12_bound | constructor; auto].
+    - inversion HF; subst.
+      inversion H2; subst.
+      inversion H4; subst.
+      constructor; [apply addr12_bound | constructor; auto]. }
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. exact Hwfi.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_JCN_WF : forall s c a, WF s -> instr_wf (JCN c a) -> WF (execute s (JCN c a)).
+Proof.
+  intros s c a HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (c1 := c / 8).
+  set (c2 := (c / 4) mod 2).
+  set (c3 := (c / 2) mod 2).
+  set (c4 := c mod 2).
+  set (base_cond := orb (andb (acc s =? 0) (c2 =? 1))
+                        (orb (andb (carry s) (c3 =? 1))
+                             (andb (negb (test_pin s)) (c4 =? 1)))).
+  set (jump := if c1 =? 1 then negb base_cond else base_cond).
+  destruct jump.
+  - unfold WF. simpl.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+  - unfold WF. simpl.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+Qed.
+
+Lemma execute_FIM_WF : forall s r d, WF s -> instr_wf (FIM r d) -> WF (execute s (FIM r d)).
+Proof.
+  intros s r d HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := set_reg_pair s r d).
+  assert (Hs1_len: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
+  assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
+  { subst s1. apply set_reg_pair_preserves_Forall16. assumption. }
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_SRC_WF : forall s r, WF s -> instr_wf (SRC r) -> WF (execute s (SRC r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (v := get_reg_pair s r).
+  set (hi := v / 16).
+  set (lo := v mod 16).
+  set (chip := hi / 4).
+  set (rno := hi mod 4).
+  assert (Hv: v < 256).
+  { subst v. apply get_reg_pair_bound_helper; auto. }
+  assert (Hhi: hi < 16).
+  { subst hi. apply Nat.div_lt_upper_bound. lia. exact Hv. }
+  assert (Hchip: chip < 4).
+  { subst chip. apply Nat.div_lt_upper_bound. lia. exact Hhi. }
+  assert (Hrno: rno < 4).
+  { subst rno. apply Nat.mod_upper_bound. lia. }
+  assert (Hlo: lo < 16).
+  { subst lo. apply Nat.mod_upper_bound. lia. }
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. unfold WF_sel. unfold NCHIPS, NREGS, NMAIN. simpl. split; [exact Hchip | split; [exact Hrno | exact Hlo]].
+  split. assumption.
+  split. assumption.
+  split. exact Hhi.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_FIN_WF : forall s r, WF s -> instr_wf (FIN r) -> WF (execute s (FIN r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := set_reg_pair s r _).
+  assert (Hs1_len: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
+  assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
+  { subst s1. apply set_reg_pair_preserves_Forall16. assumption. }
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_JIN_WF : forall s r, WF s -> instr_wf (JIN r) -> WF (execute s (JIN r)).
+Proof.
+  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_ISZ_WF : forall s r a, WF s -> instr_wf (ISZ r a) -> WF (execute s (ISZ r a)).
+Proof.
+  intros s r a HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  set (s1 := set_reg s r _).
+  assert (Hs1_len: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_preserves_length. assumption. }
+  assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
+  { subst s1. apply set_reg_preserves_Forall16. assumption. }
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0).
+  - unfold WF. simpl.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+  - unfold WF. simpl.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+Qed.
+
+Lemma pop_stack_preserves_fields : forall s opt_addr s',
+  pop_stack s = (opt_addr, s') ->
+  regs s' = regs s /\
+  acc s' = acc s /\
+  carry s' = carry s /\
+  pc s' = pc s /\
+  ram_sys s' = ram_sys s /\
+  cur_bank s' = cur_bank s /\
+  sel_ram s' = sel_ram s /\
+  rom_ports s' = rom_ports s /\
+  sel_rom s' = sel_rom s /\
+  rom s' = rom s /\
+  test_pin s' = test_pin s /\
+  prog_pulses s' = prog_pulses s.
+Proof.
+  intros s opt_addr s' Hpop.
+  unfold pop_stack in Hpop.
+  destruct (stack s) as [|h t]; inversion Hpop; subst; simpl;
+    repeat split; reflexivity.
+Qed.
+
+Lemma pop_stack_preserves_addr_bound : forall s opt_addr s',
+  pop_stack s = (opt_addr, s') ->
+  Forall (fun a => a < 4096) (stack s) ->
+  match opt_addr with
+  | Some addr => addr < 4096
+  | None => True
+  end.
+Proof.
+  intros s opt_addr s' Hpop Hall.
+  unfold pop_stack in Hpop.
+  destruct (stack s) as [|h t]; inversion Hpop; subst; simpl; auto.
+  inversion Hall; auto.
+Qed.
+
+Lemma execute_BBL_WF : forall s d, WF s -> instr_wf (BBL d) -> WF (execute s (BBL d)).
+Proof.
+  intros s d HWF Hwfi. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  destruct (pop_stack s) as [[addr|] s'] eqn:Epop.
+  - assert (Hs'_len: length (stack s') <= 3).
+    { eapply pop_stack_len_le3; eauto; lia. }
+    assert (Hs'_for: Forall (fun x => x < 4096) (stack s')).
+    { eapply pop_stack_Forall_addr12; eauto. }
+    assert (Haddr: addr < 4096).
+    { pose proof (pop_stack_preserves_addr_bound s (Some addr) s' Epop HstkFor).
+      simpl in H. exact H. }
+    pose proof (pop_stack_preserves_fields s (Some addr) s' Epop) as Hfields.
+    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest Hpulse]]]]]]]]]]].
+    unfold WF.
+    split. rewrite Hregs. assumption.
+    split. rewrite Hregs. assumption.
+    split. apply nibble_lt16.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+  - assert (Hs'_len: length (stack s') <= 3).
+    { eapply pop_stack_len_le3; eauto; lia. }
+    assert (Hs'_for: Forall (fun x => x < 4096) (stack s')).
+    { eapply pop_stack_Forall_addr12; eauto. }
+    pose proof (pop_stack_preserves_fields s None s' Epop) as Hfields.
+    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest Hpulse]]]]]]]]]]].
+    unfold WF.
+    split. rewrite Hregs. assumption.
+    split. rewrite Hregs. assumption.
+    split. apply nibble_lt16.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
+Qed.
+
+Lemma ram_write_main_sys_preserves_len : forall s v,
+  WF s -> length (ram_write_main_sys s v) = NBANKS.
+Proof.
+  intros s v HWF.
+  unfold ram_write_main_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  pose proof (WF_reg_upd_main _ (sel_char (sel_ram s)) v Hrg) as Hrg'.
+  pose proof (WF_chip_upd_reg _ (sel_reg (sel_ram s)) _ Hch Hrg') as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma ram_write_main_sys_preserves_WF_bank : forall s v,
+  WF s -> Forall WF_bank (ram_write_main_sys s v).
+Proof.
+  intros s v HWF.
+  unfold ram_write_main_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  pose proof (WF_reg_upd_main _ (sel_char (sel_ram s)) v Hrg) as Hrg'.
+  pose proof (WF_chip_upd_reg _ (sel_reg (sel_ram s)) _ Hch Hrg') as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma ram_write_status_sys_preserves_len : forall s idx v,
+  WF s -> length (ram_write_status_sys s idx v) = NBANKS.
+Proof.
+  intros s idx v HWF.
+  unfold ram_write_status_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  pose proof (WF_reg_upd_stat _ idx v Hrg) as Hrg'.
+  pose proof (WF_chip_upd_reg _ (sel_reg (sel_ram s)) _ Hch Hrg') as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma ram_write_status_sys_preserves_WF_bank : forall s idx v,
+  WF s -> Forall WF_bank (ram_write_status_sys s idx v).
+Proof.
+  intros s idx v HWF.
+  unfold ram_write_status_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  pose proof (WF_reg_upd_stat _ idx v Hrg) as Hrg'.
+  pose proof (WF_chip_upd_reg _ (sel_reg (sel_ram s)) _ Hch Hrg') as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma ram_write_port_sys_preserves_len : forall s v,
+  WF s -> length (ram_write_port_sys s v) = NBANKS.
+Proof.
+  intros s v HWF.
+  unfold ram_write_port_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_chip_upd_port _ v Hch) as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma ram_write_port_sys_preserves_WF_bank : forall s v,
+  WF s -> Forall WF_bank (ram_write_port_sys s v).
+Proof.
+  intros s v HWF.
+  unfold ram_write_port_sys.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_chip_upd_port _ v Hch) as Hch'.
+  pose proof (WF_bank_upd_chip _ (sel_chip (sel_ram s)) _ Hbk Hch') as Hbk'.
+  eapply WF_sys_upd_bank; eauto.
+Qed.
+
+Lemma update_nth_preserves_length : forall A (l : list A) (n : nat) (x : A),
+  length (update_nth n x l) = length l.
+Proof.
+  intros A l n x.
+  apply update_nth_length.
+Qed.
+
+Lemma update_nth_preserves_Forall16 : forall (l : list nat) (n : nat) (x : nat),
+  Forall (fun y => y < 16) l ->
+  x < 16 ->
+  Forall (fun y => y < 16) (update_nth n x l).
+Proof.
+  intros l n x Hall Hx.
+  apply Forall_update_nth; auto.
+Qed.
+
+Lemma ram_read_main_bound : forall s,
+  WF s ->
+  ram_read_main s < 16.
+Proof.
+  intros s HWF.
+  unfold ram_read_main.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  destruct Hrg as [Hmain_len [Hmain_for _]].
+  unfold get_main.
+  eapply nth_Forall_lt; eauto; lia.
+Qed.
+
+Lemma get_stat_bound : forall s,
+  WF s ->
+  forall idx,
+  let b := get_bank s (cur_bank s) in
+  let ch := get_chip b (sel_chip (sel_ram s)) in
+  let rg := get_regRAM ch (sel_reg (sel_ram s)) in
+  get_stat rg idx < 16.
+Proof.
+  intros s HWF idx.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  destruct Hrg as [_ [_ [Hstat_len Hstat_for]]].
+  unfold get_stat.
+  eapply nth_Forall_lt; eauto; lia.
+Qed.
+
+Lemma execute_WRM_WF : forall s, WF s -> WF (execute s WRM).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_main_sys_preserves_len. assumption.
+  split. apply ram_write_main_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WMP_WF : forall s, WF s -> WF (execute s WMP).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_port_sys_preserves_len. assumption.
+  split. apply ram_write_port_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WRR_WF : forall s, WF s -> WF (execute s WRR).
+Proof.
+  intros s HWF. unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. rewrite update_nth_length. assumption.
+  split. apply Forall_update_nth; auto. apply nibble_lt16.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WPM_WF : forall s, WF s -> WF (execute s WPM).
+Proof.
+  intros s HWF. unfold execute, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WR0_WF : forall s, WF s -> WF (execute s WR0).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_status_sys_preserves_len. assumption.
+  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WR1_WF : forall s, WF s -> WF (execute s WR1).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_status_sys_preserves_len. assumption.
+  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WR2_WF : forall s, WF s -> WF (execute s WR2).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_status_sys_preserves_len. assumption.
+  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_WR3_WF : forall s, WF s -> WF (execute s WR3).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. apply ram_write_status_sys_preserves_len. assumption.
+  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_SBM_WF : forall s, WF s -> WF (execute s SBM).
+Proof.
+  intros s HWF. unfold execute, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RDM_WF : forall s, WF s -> WF (execute s RDM).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. apply ram_read_main_bound. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RDR_WF : forall s, WF s -> WF (execute s RDR).
+Proof.
+  intros s HWF. unfold execute, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. eapply nth_Forall_lt; eauto; lia.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_ADM_WF : forall s, WF s -> WF (execute s ADM).
+Proof.
+  intros s HWF. unfold execute, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. apply nibble_lt16.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RD0_WF : forall s, WF s -> WF (execute s RD0).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. apply get_stat_bound. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RD1_WF : forall s, WF s -> WF (execute s RD1).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. apply get_stat_bound. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RD2_WF : forall s, WF s -> WF (execute s RD2).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. apply get_stat_bound. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_RD3_WF : forall s, WF s -> WF (execute s RD3).
+Proof.
+  intros s HWF.
+  assert (HWF': WF s) by assumption.
+  unfold execute.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  unfold WF.
+  split. assumption.
+  split. assumption.
+  split. apply get_stat_bound. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
+Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
+Proof.
+  intros s HWF. unfold execute, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. apply Nat.mod_upper_bound. unfold NBANKS. lia.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
+Qed.
+
 Theorem execute_preserves_WF :
   forall s i, WF s -> instr_wf i -> WF (execute s i).
 Proof.
-Admitted.
+  intros s i HWF Hwfi.
+  destruct i.
+  - apply execute_NOP_WF; assumption.
+  - apply execute_JCN_WF; assumption.
+  - apply execute_FIM_WF; assumption.
+  - apply execute_SRC_WF; assumption.
+  - apply execute_FIN_WF; assumption.
+  - apply execute_JIN_WF; assumption.
+  - apply execute_JUN_WF; assumption.
+  - apply execute_JMS_WF; assumption.
+  - apply execute_INC_WF; assumption.
+  - apply execute_ISZ_WF; assumption.
+  - apply execute_ADD_WF; assumption.
+  - apply execute_SUB_WF; assumption.
+  - apply execute_LD_WF; assumption.
+  - apply execute_XCH_WF; assumption.
+  - apply execute_BBL_WF; assumption.
+  - apply execute_LDM_WF; assumption.
+  - apply execute_WRM_WF; assumption.
+  - apply execute_WMP_WF; assumption.
+  - apply execute_WRR_WF; assumption.
+  - apply execute_WPM_WF; assumption.
+  - apply execute_WR0_WF; assumption.
+  - apply execute_WR1_WF; assumption.
+  - apply execute_WR2_WF; assumption.
+  - apply execute_WR3_WF; assumption.
+  - apply execute_SBM_WF; assumption.
+  - apply execute_RDM_WF; assumption.
+  - apply execute_RDR_WF; assumption.
+  - apply execute_ADM_WF; assumption.
+  - apply execute_RD0_WF; assumption.
+  - apply execute_RD1_WF; assumption.
+  - apply execute_RD2_WF; assumption.
+  - apply execute_RD3_WF; assumption.
+  - apply execute_CLB_WF; assumption.
+  - apply execute_CLC_WF; assumption.
+  - apply execute_IAC_WF; assumption.
+  - apply execute_CMC_WF; assumption.
+  - apply execute_CMA_WF; assumption.
+  - apply execute_RAL_WF; assumption.
+  - apply execute_RAR_WF; assumption.
+  - apply execute_TCC_WF; assumption.
+  - apply execute_DAC_WF; assumption.
+  - apply execute_TCS_WF; assumption.
+  - apply execute_STC_WF; assumption.
+  - apply execute_DAA_WF; assumption.
+  - apply execute_KBP_WF; assumption.
+  - apply execute_DCL_WF; assumption.
+Qed.
 
 Theorem step_preserves_WF : forall s, WF s -> WF (step s).
 Proof.
@@ -2733,7 +4188,25 @@ Theorem step_pc_shape :
   (exists off, off < 256 /\ pc s' = addr12_of_nat (page_base (pc_inc2 s) + off)) \/
   (exists a, pc s' = a /\ (a < 4096)).
 Proof.
-Admitted.
+  intros s Hwf. unfold step.
+  set (b1 := fetch_byte s (pc s)).
+  set (b2 := fetch_byte s (addr12_of_nat (pc s + 1))).
+  apply (execute_pc_bounded s (decode b1 b2)).
+  - apply decode_instr_wf.
+    + unfold b1, fetch_byte.
+      destruct (nth_in_or_default _ (pc s) (rom s) 0) as [Hin|Hdef].
+      * destruct Hwf as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [HromFor _]]]]]]]]]]]]]].
+        rewrite Forall_forall in HromFor.
+        apply HromFor. exact Hin.
+      * rewrite Hdef. lia.
+    + unfold b2, fetch_byte.
+      destruct (nth_in_or_default _ (addr12_of_nat (pc s + 1)) (rom s) 0) as [Hin|Hdef].
+      * destruct Hwf as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [HromFor _]]]]]]]]]]]]]].
+        rewrite Forall_forall in HromFor.
+        apply HromFor. exact Hin.
+      * rewrite Hdef. lia.
+  - exact Hwf.
+Qed.
 
 (* --- Frames (no unintended writes) --- *)
 
