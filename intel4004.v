@@ -174,9 +174,11 @@ Record Intel4004State := mkState {
   sel_ram   : RAMSel;           (* last RAM address sent by SRC (chip,reg,char) *)
   rom_ports : list nibble;      (* 16 ROM ports (4-bit), selected by last SRC *)
   sel_rom   : nat;              (* 0..15, last ROM port selected by SRC *)
-  rom       : list byte;        (* program ROM (bytes) *)
+  rom       : list byte;        (* program ROM (bytes) - writable via WPM *)
   test_pin  : bool;             (* TEST input (active low in JCN condition) *)
-  prog_pulses : nat             (* counts WPM pulses; observable but inert otherwise *)
+  prom_addr : addr12;           (* PROM programming address (set via ROM ports) *)
+  prom_data : byte;             (* PROM programming data (set via ROM ports) *)
+  prom_enable : bool            (* PROM write enable (set via ROM port control) *)
 }.
 
 (* =========================== Registers ============================== *)
@@ -188,7 +190,7 @@ Definition set_reg (s : Intel4004State) (r : nat) (v : nibble) : Intel4004State 
   let new_regs := update_nth r (nibble_of_nat v) (regs s) in
   mkState (acc s) new_regs (carry s) (pc s) (stack s)
           (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-          (rom s) (test_pin s) (prog_pulses s).
+          (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s).
 
 Definition get_reg_pair (s : Intel4004State) (r : nat) : byte :=
   let r_even := r - (r mod 2) in
@@ -250,7 +252,7 @@ Definition push_stack (s : Intel4004State) (addr : addr12) : Intel4004State :=
     end in
   mkState (acc s) (regs s) (carry s) (pc s) new_stack
           (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-          (rom s) (test_pin s) (prog_pulses s).
+          (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s).
 
 Definition pop_stack (s : Intel4004State) : (option addr12 * Intel4004State) :=
   match stack s with
@@ -258,7 +260,7 @@ Definition pop_stack (s : Intel4004State) : (option addr12 * Intel4004State) :=
   | a :: rest =>
       (Some a, mkState (acc s) (regs s) (carry s) (pc s) rest
                        (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-                       (rom s) (test_pin s) (prog_pulses s))
+                       (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
   end.
 
 Lemma push_stack_len_le3 : forall s a,
@@ -1053,17 +1055,17 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
   | NOP =>
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | LDM n =>
       mkState (nibble_of_nat n) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | LD r =>
       mkState (get_reg s r) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | XCH r =>
       let old_acc := acc s in
@@ -1071,20 +1073,20 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let s1 := set_reg s r old_acc in
       mkState old_reg (regs s1) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | INC r =>
       let new_val := nibble_of_nat (get_reg s r + 1) in
       let s1 := set_reg s r new_val in
       mkState (acc s) (regs s1) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | ADD r =>
       let sum := (acc s) + (get_reg s r) + (if carry s then 1 else 0) in
       mkState (nibble_of_nat sum) (regs s) (16 <=? sum) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | SUB r =>
       let reg_val := get_reg s r in
@@ -1092,109 +1094,116 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let diff := (acc s) + 16 - reg_val - borrow in
       mkState (nibble_of_nat diff) (regs s) (16 <=? diff) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | IAC =>
       let sum := (acc s) + 1 in
       mkState (nibble_of_nat sum) (regs s) (16 <=? sum) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | DAC =>
       let newv := (acc s) + 15 in  (* -1 mod 16 *)
       let borrow := (acc s =? 0) in
       mkState (nibble_of_nat newv) (regs s) (negb borrow) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | CLC =>
       mkState (acc s) (regs s) false (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | STC =>
       mkState (acc s) (regs s) true (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | CMC =>
       mkState (acc s) (regs s) (negb (carry s)) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | CMA =>
       mkState (nibble_of_nat (15 - (acc s))) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | CLB =>
       mkState 0 (regs s) false (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | RAL =>
       let new_acc := nibble_of_nat ((acc s) * 2 + if carry s then 1 else 0) in
       let new_carry := 8 <=? (acc s) in
       mkState new_acc (regs s) new_carry (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | RAR =>
       let new_acc := nibble_of_nat ((acc s) / 2 + if carry s then 8 else 0) in
       let new_carry := (acc s) mod 2 =? 1 in
       mkState new_acc (regs s) new_carry (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | TCC =>
       mkState (if carry s then 1 else 0) (regs s) false (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | TCS =>
       mkState (if carry s then 10 else 9) (regs s) false (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | DAA =>
-      let adjusted := if (9 <? acc s) || carry s then (acc s + 6) else acc s in
+      let acc_with_carry := acc s + (if carry s then 1 else 0) in
+      let needs_adjust := 9 <? acc_with_carry in
+      let adjusted := if needs_adjust then acc_with_carry + 6 else acc_with_carry in
       mkState (nibble_of_nat adjusted)
               (regs s)
-              ((9 <? acc s) || carry s || (16 <=? adjusted))
+              (16 <=? adjusted)
               (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | KBP =>
+      (* Keyboard Process: Convert 1-of-n code to binary position
+         Returns position (1-4) for single-bit values (1,2,4,8)
+         Returns 15 for any other value (including 0 and multi-bit values)
+         NOTE: Real 4004 behavior for multi-bit inputs is undocumented;
+         returning 15 is a conservative choice matching the datasheet spec. *)
       let result :=
         match acc s with
         | 0 => 0 | 1 => 1 | 2 => 2 | 4 => 3 | 8 => 4 | _ => 15
         end in
       mkState result (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | JUN addr =>
       mkState (acc s) (regs s) (carry s) addr (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | JMS addr =>
       let s1 := push_stack s (addr12_of_nat (pc s + 2)) in
       mkState (acc s) (regs s) (carry s) addr (stack s1)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | BBL n =>
       match pop_stack s with
       | (Some addr, s1) =>
           mkState (nibble_of_nat n) (regs s1) (carry s) addr (stack s1)
                   (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-                  (rom s) (test_pin s) (prog_pulses s)
+                  (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
       | (None, s1) =>
           mkState (nibble_of_nat n) (regs s1) (carry s) (pc_inc1 s) (stack s1)
                   (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-                  (rom s) (test_pin s) (prog_pulses s)
+                  (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
       end
 
   | JCN cond off =>
@@ -1211,17 +1220,17 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       then mkState (acc s) (regs s) (carry s)
                    (addr12_of_nat (base_for_next2 s + off))
                    (stack s) (ram_sys s) (cur_bank s) (sel_ram s)
-                   (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s)
+                   (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
       else mkState (acc s) (regs s) (carry s) (pc_inc2 s) (stack s)
                    (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-                   (rom s) (test_pin s) (prog_pulses s)
+                   (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | FIM r data =>
       (* load immediate into register *pair* r (even) *)
       let s1 := set_reg_pair s r data in
       mkState (acc s) (regs s1) (carry s) (pc_inc2 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | ISZ r off =>
       let new_val := nibble_of_nat (get_reg s r + 1) in
@@ -1229,11 +1238,11 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       if new_val =? 0
       then mkState (acc s) (regs s1) (carry s) (pc_inc2 s) (stack s)
                    (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-                   (rom s) (test_pin s) (prog_pulses s)
+                   (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
       else mkState (acc s) (regs s1) (carry s)
                    (addr12_of_nat (base_for_next2 s + off))
                    (stack s) (ram_sys s) (cur_bank s) (sel_ram s)
-                   (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s)
+                   (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | SRC r =>
       (* Send register pair r externally:
@@ -1248,7 +1257,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let selr := mkRAMSel chip rno lo in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) selr (rom_ports s) hi
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | FIN r =>
       (* fetch indirect: lower 8 from R0:R1; page is that of next instr *)
@@ -1259,7 +1268,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let s1 := set_reg_pair s r b in
       mkState (acc s) (regs s1) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | JIN r =>
       (* jump within page of *next* instruction (quirk included) *)
@@ -1268,7 +1277,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let addr := addr12_of_nat (page * 256 + low8) in
       mkState (acc s) (regs s) (carry s) addr (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   (* ------------------ 4002 RAM + 4001 ROM I/O ------------------ *)
 
@@ -1276,20 +1285,20 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let new_sys := ram_write_main_sys s (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | RDM =>
       let v := ram_read_main s in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | ADM =>
       let v := ram_read_main s in
       let sum := (acc s) + v + (if carry s then 1 else 0) in
       mkState (nibble_of_nat sum) (regs s) (16 <=? sum) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | SBM =>
       let v := ram_read_main s in
@@ -1297,28 +1306,28 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let diff := (acc s) + 16 - v - borrow in
       mkState (nibble_of_nat diff) (regs s) (16 <=? diff) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | WR0 =>
       let new_sys := ram_write_status_sys s 0 (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | WR1 =>
       let new_sys := ram_write_status_sys s 1 (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | WR2 =>
       let new_sys := ram_write_status_sys s 2 (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | WR3 =>
       let new_sys := ram_write_status_sys s 3 (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | RD0 =>
       let b := get_bank s (cur_bank s) in
@@ -1327,7 +1336,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let v := get_stat rg 0 in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | RD1 =>
       let b := get_bank s (cur_bank s) in
       let ch := get_chip b (sel_chip (sel_ram s)) in
@@ -1335,7 +1344,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let v := get_stat rg 1 in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | RD2 =>
       let b := get_bank s (cur_bank s) in
       let ch := get_chip b (sel_chip (sel_ram s)) in
@@ -1343,7 +1352,7 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let v := get_stat rg 2 in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   | RD3 =>
       let b := get_bank s (cur_bank s) in
       let ch := get_chip b (sel_chip (sel_ram s)) in
@@ -1351,39 +1360,42 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
       let v := get_stat rg 3 in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | WMP =>
       let new_sys := ram_write_port_sys s (acc s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               new_sys (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | WRR =>
       let new_ports := update_nth (sel_rom s) (nibble_of_nat (acc s)) (rom_ports s) in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) new_ports (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | RDR =>
       let v := nth (sel_rom s) (rom_ports s) 0 in
       mkState v (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | WPM =>
-      (* Program-memory write pulse (not visible to our ROM contents).
-         We count pulses to make the effect explicit and non-stub. *)
+      (* Write Program Memory: Programs PROM at latched address/data
+         When prom_enable is true, writes prom_data to ROM at prom_addr *)
+      let new_rom := if prom_enable s
+                     then update_nth (prom_addr s) (prom_data s) (rom s)
+                     else rom s in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (S (prog_pulses s))
+              new_rom (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | DCL =>
       (* Designate command line: select RAM bank from ACC (lower 2 bits, 0..3) *)
       let nb := (acc s) mod NBANKS in
       mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
               (ram_sys s) nb (sel_ram s) (rom_ports s) (sel_rom s)
-              (rom s) (test_pin s) (prog_pulses s)
+              (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
   end.
 
 (* ======================= Small-step machine ========================= *)
@@ -1409,11 +1421,11 @@ Definition empty_sys : list RAMBank := repeat empty_bank NBANKS.
 
 Definition init_state : Intel4004State :=
   mkState 0 (repeat 0 16) false 0 [] empty_sys 0 (mkRAMSel 0 0 0)
-          (repeat 0 16) 0 (repeat 0 4096) false 0.
+          (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
 
 Definition reset_state (s:Intel4004State) : Intel4004State :=
   mkState 0 (regs s) false 0 [] (ram_sys s) 0 (mkRAMSel 0 0 0)
-          (repeat 0 16) 0 (rom s) false 0.
+          (repeat 0 16) 0 (rom s) false 0 0 false.
 
 (* ======================== Well-formedness =========================== *)
 
@@ -1451,7 +1463,9 @@ Definition WF (s : Intel4004State) : Prop :=
   Forall (fun x => x < 16) (rom_ports s) /\
   sel_rom s < 16 /\
   Forall (fun b => b < 256) (rom s) /\
-  length (rom s) = 4096.
+  length (rom s) = 4096 /\
+  prom_addr s < 4096 /\
+  prom_data s < 256.
 
 (* Helper lemmas for init_state_WF *)
 
@@ -1545,7 +1559,9 @@ Proof.
   split. apply repeat_0_lt_16.
   split. simpl; lia.
   split. apply repeat_0_lt_256.
-  reflexivity.
+  split. reflexivity.
+  split. simpl; lia.
+  simpl; lia.
 Qed.
 
 (* ====================== Preservation lemmas ========================= *)
@@ -1656,7 +1672,7 @@ Lemma get_bank_upd_bank_in_sys : forall s b bk,
   b < NBANKS ->
   get_bank (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
                      (upd_bank_in_sys s b bk) (cur_bank s) (sel_ram s)
-                     (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s))
+                     (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
            b = bk.
 Proof.
   intros s b bk [_ [_ [_ [_ [_ [_ [Hsys_len _]]]]]]] Hb.
@@ -1704,7 +1720,7 @@ Lemma ram_write_then_read_main : forall s v,
   sel_char (sel_ram s) < NMAIN ->
   ram_read_main (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
                           (ram_write_main_sys s v) (cur_bank s) (sel_ram s)
-                          (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prog_pulses s))
+                          (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
   = nibble_of_nat v.
 Proof.
   intros s v Hwf Hb Hc Hr Hi.
@@ -2353,7 +2369,7 @@ Lemma execute_NOP_preserves_WF : forall s,
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.  (* length regs = 16 *)
   split. assumption.  (* Forall < 16 regs *)
   split. assumption.  (* acc < 16 *)
@@ -2368,7 +2384,9 @@ Proof.
   split. assumption.  (* Forall < 16 rom_ports *)
   split. assumption.  (* sel_rom < 16 *)
   split. assumption.  (* Forall < 256 rom *)
-  assumption.  (* rom length = 4096 *)
+  split. assumption.  (* rom length = 4096 *)
+  split. assumption.  (* prom_addr < 4096 *)
+  assumption.  (* prom_data < 256 *)
 Qed.
 
 
@@ -2376,11 +2394,13 @@ Lemma execute_NOP_WF : forall s, WF s -> WF (execute s NOP).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2398,11 +2418,13 @@ Lemma execute_LDM_WF : forall s n, WF s -> instr_wf (LDM n) -> WF (execute s (LD
 Proof.
   intros s n HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2420,11 +2442,13 @@ Lemma execute_LD_WF : forall s r, WF s -> instr_wf (LD r) -> WF (execute s (LD r
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. eapply nth_Forall_lt; eauto; lia.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2442,7 +2466,7 @@ Lemma execute_XCH_WF : forall s r, WF s -> instr_wf (XCH r) -> WF (execute s (XC
 Proof.
   intros s r HWF Hwfi. unfold execute. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := set_reg s r (acc s)).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -2463,6 +2487,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -2470,7 +2496,7 @@ Lemma execute_INC_WF : forall s r, WF s -> instr_wf (INC r) -> WF (execute s (IN
 Proof.
   intros s r HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := set_reg s r (nibble_of_nat (get_reg s r + 1))).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -2491,6 +2517,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -2498,11 +2526,13 @@ Lemma execute_ADD_WF : forall s r, WF s -> instr_wf (ADD r) -> WF (execute s (AD
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2520,11 +2550,13 @@ Lemma execute_SUB_WF : forall s r, WF s -> instr_wf (SUB r) -> WF (execute s (SU
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2542,11 +2574,13 @@ Lemma execute_IAC_WF : forall s, WF s -> WF (execute s IAC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2564,11 +2598,13 @@ Lemma execute_DAC_WF : forall s, WF s -> WF (execute s DAC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2586,11 +2622,13 @@ Lemma execute_CLC_WF : forall s, WF s -> WF (execute s CLC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2608,11 +2646,13 @@ Lemma execute_STC_WF : forall s, WF s -> WF (execute s STC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2630,11 +2670,13 @@ Lemma execute_CMC_WF : forall s, WF s -> WF (execute s CMC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2652,11 +2694,13 @@ Lemma execute_CMA_WF : forall s, WF s -> WF (execute s CMA).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2674,11 +2718,13 @@ Lemma execute_CLB_WF : forall s, WF s -> WF (execute s CLB).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. lia.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2696,11 +2742,13 @@ Lemma execute_RAL_WF : forall s, WF s -> WF (execute s RAL).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2718,11 +2766,13 @@ Lemma execute_RAR_WF : forall s, WF s -> WF (execute s RAR).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2740,11 +2790,13 @@ Lemma execute_TCC_WF : forall s, WF s -> WF (execute s TCC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. destruct (carry s); lia.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2762,11 +2814,13 @@ Lemma execute_TCS_WF : forall s, WF s -> WF (execute s TCS).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. destruct (carry s); lia.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2784,11 +2838,13 @@ Lemma execute_DAA_WF : forall s, WF s -> WF (execute s DAA).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2806,7 +2862,7 @@ Lemma execute_KBP_WF : forall s, WF s -> WF (execute s KBP).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split.
@@ -2838,6 +2894,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -2845,11 +2903,13 @@ Lemma execute_JUN_WF : forall s a, WF s -> instr_wf (JUN a) -> WF (execute s (JU
 Proof.
   intros s a HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. exact Hwfi.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -2886,7 +2946,7 @@ Lemma execute_JMS_WF : forall s a, WF s -> instr_wf (JMS a) -> WF (execute s (JM
 Proof.
   intros s a HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := push_stack s (addr12_of_nat (pc s + 2))).
   assert (Hs1_len: length (stack s1) <= 3).
   { subst s1. apply push_stack_len_le3. }
@@ -2919,6 +2979,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -2926,7 +2988,7 @@ Lemma execute_JCN_WF : forall s c a, WF s -> instr_wf (JCN c a) -> WF (execute s
 Proof.
   intros s c a HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (c1 := c / 8).
   set (c2 := (c / 4) mod 2).
   set (c3 := (c / 2) mod 2).
@@ -2951,12 +3013,16 @@ Proof.
     split. assumption.
     split. assumption.
     split. assumption.
+    split. assumption.
+    split. assumption.
     assumption.
   - unfold WF. simpl.
     split. assumption.
     split. assumption.
     split. assumption.
     split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
     split. assumption.
     split. assumption.
     split. assumption.
@@ -2974,7 +3040,7 @@ Lemma execute_FIM_WF : forall s r d, WF s -> instr_wf (FIM r d) -> WF (execute s
 Proof.
   intros s r d HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := set_reg_pair s r d).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
@@ -2995,6 +3061,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3002,7 +3070,7 @@ Lemma execute_SRC_WF : forall s r, WF s -> instr_wf (SRC r) -> WF (execute s (SR
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (v := get_reg_pair s r).
   set (hi := v / 16).
   set (lo := v mod 16).
@@ -3032,6 +3100,8 @@ Proof.
   split. assumption.
   split. exact Hhi.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3039,7 +3109,7 @@ Lemma execute_FIN_WF : forall s r, WF s -> instr_wf (FIN r) -> WF (execute s (FI
 Proof.
   intros s r HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := set_reg_pair s r _).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
@@ -3060,6 +3130,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3067,11 +3139,13 @@ Lemma execute_JIN_WF : forall s r, WF s -> instr_wf (JIN r) -> WF (execute s (JI
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3089,7 +3163,7 @@ Lemma execute_ISZ_WF : forall s r a, WF s -> instr_wf (ISZ r a) -> WF (execute s
 Proof.
   intros s r a HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   set (s1 := set_reg s r _).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -3111,12 +3185,16 @@ Proof.
     split. assumption.
     split. assumption.
     split. assumption.
+    split. assumption.
+    split. assumption.
     assumption.
   - unfold WF. simpl.
     split. assumption.
     split. assumption.
     split. assumption.
     split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
     split. assumption.
     split. assumption.
     split. assumption.
@@ -3143,7 +3221,9 @@ Lemma pop_stack_preserves_fields : forall s opt_addr s',
   sel_rom s' = sel_rom s /\
   rom s' = rom s /\
   test_pin s' = test_pin s /\
-  prog_pulses s' = prog_pulses s.
+  prom_addr s' = prom_addr s /\
+  prom_data s' = prom_data s /\
+  prom_enable s' = prom_enable s.
 Proof.
   intros s opt_addr s' Hpop.
   unfold pop_stack in Hpop.
@@ -3169,7 +3249,7 @@ Lemma execute_BBL_WF : forall s d, WF s -> instr_wf (BBL d) -> WF (execute s (BB
 Proof.
   intros s d HWF Hwfi. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   destruct (pop_stack s) as [[addr|] s'] eqn:Epop.
   - assert (Hs'_len: length (stack s') <= 3).
     { eapply pop_stack_len_le3; eauto; lia. }
@@ -3179,11 +3259,13 @@ Proof.
     { pose proof (pop_stack_preserves_addr_bound s (Some addr) s' Epop HstkFor).
       simpl in H. exact H. }
     pose proof (pop_stack_preserves_fields s (Some addr) s' Epop) as Hfields.
-    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest Hpulse]]]]]]]]]]].
-    unfold WF.
+    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest [Hpaddr' [Hpdata' Hpenable']]]]]]]]]]]]].
+    unfold WF. simpl.
     split. rewrite Hregs. assumption.
     split. rewrite Hregs. assumption.
     split. apply nibble_lt16.
+    split. assumption.
+    split. assumption.
     split. assumption.
     split. assumption.
     split. assumption.
@@ -3201,12 +3283,14 @@ Proof.
     assert (Hs'_for: Forall (fun x => x < 4096) (stack s')).
     { eapply pop_stack_Forall_addr12; eauto. }
     pose proof (pop_stack_preserves_fields s None s' Epop) as Hfields.
-    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest Hpulse]]]]]]]]]]].
-    unfold WF.
+    destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest [Hpaddr' [Hpdata' Hpenable']]]]]]]]]]]]].
+    unfold WF. simpl.
     split. rewrite Hregs. assumption.
     split. rewrite Hregs. assumption.
     split. apply nibble_lt16.
     split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
     split. assumption.
     split. assumption.
     split. assumption.
@@ -3377,7 +3461,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3393,6 +3477,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3402,7 +3488,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3418,6 +3504,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3425,7 +3513,7 @@ Lemma execute_WRR_WF : forall s, WF s -> WF (execute s WRR).
 Proof.
   intros s HWF. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF. simpl.
   split. assumption.
   split. assumption.
@@ -3441,29 +3529,61 @@ Proof.
   split. apply Forall_update_nth; auto. apply nibble_lt16.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
+Qed.
+
+Lemma update_nth_preserves_Forall256 : forall (l : list nat) (n : nat) (x : nat),
+  Forall (fun y => y < 256) l ->
+  x < 256 ->
+  Forall (fun y => y < 256) (update_nth n x l).
+Proof.
+  intros l n x Hall Hx.
+  apply Forall_update_nth; auto.
 Qed.
 
 Lemma execute_WPM_WF : forall s, WF s -> WF (execute s WPM).
 Proof.
-  intros s HWF. unfold execute, WF in *.
+  intros s HWF. unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  unfold WF. simpl.
+  destruct (prom_enable s) eqn:Eprom.
+  - split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply update_nth_preserves_Forall256; assumption.
+    split. rewrite update_nth_length. assumption.
+    split. assumption.
+    assumption.
+  - split. assumption.
+    split. assumption.
+    split. assumption.
+    split. apply addr12_bound.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    split. assumption.
+    assumption.
 Qed.
 
 Lemma execute_WR0_WF : forall s, WF s -> WF (execute s WR0).
@@ -3472,7 +3592,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3482,6 +3602,8 @@ Proof.
   split. assumption.
   split. apply ram_write_status_sys_preserves_len. assumption.
   split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3497,7 +3619,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3507,6 +3629,8 @@ Proof.
   split. assumption.
   split. apply ram_write_status_sys_preserves_len. assumption.
   split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3522,7 +3646,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3532,6 +3656,8 @@ Proof.
   split. assumption.
   split. apply ram_write_status_sys_preserves_len. assumption.
   split. apply ram_write_status_sys_preserves_WF_bank. assumption.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3547,7 +3673,7 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
@@ -3563,6 +3689,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. assumption.
+  split. assumption.
+  split. assumption.
   assumption.
 Qed.
 
@@ -3570,11 +3698,13 @@ Lemma execute_SBM_WF : forall s, WF s -> WF (execute s SBM).
 Proof.
   intros s HWF. unfold execute, WF in *.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3594,12 +3724,14 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
   split. apply ram_read_main_bound. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3617,11 +3749,13 @@ Lemma execute_RDR_WF : forall s, WF s -> WF (execute s RDR).
 Proof.
   intros s HWF. unfold execute, WF in *.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. eapply nth_Forall_lt; eauto; lia.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3639,11 +3773,13 @@ Lemma execute_ADM_WF : forall s, WF s -> WF (execute s ADM).
 Proof.
   intros s HWF. unfold execute, WF in *.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. apply nibble_lt16.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3663,12 +3799,14 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
   split. apply get_stat_bound. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3688,12 +3826,14 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
   split. apply get_stat_bound. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3713,12 +3853,14 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
   split. apply get_stat_bound. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3738,12 +3880,14 @@ Proof.
   assert (HWF': WF s) by assumption.
   unfold execute.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   unfold WF.
   split. assumption.
   split. assumption.
   split. apply get_stat_bound. assumption.
   split. apply addr12_bound.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3761,7 +3905,7 @@ Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
 Proof.
   intros s HWF. unfold execute, WF in *.
   destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor HromLen]]]]]]]]]]]]]].
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3771,6 +3915,8 @@ Proof.
   split. assumption.
   split. assumption.
   split. apply Nat.mod_upper_bound. unfold NBANKS. lia.
+  split. assumption.
+  split. assumption.
   split. assumption.
   split. assumption.
   split. assumption.
@@ -3892,8 +4038,11 @@ Proof. intros; simpl; reflexivity. Qed.
 
 Lemma daa_adjust_rule : forall s,
   let s' := execute s DAA in
-  acc s' = nibble_of_nat (if (9 <? acc s) || carry s then acc s + 6 else acc s) /\
-  carry s' = ((9 <? acc s) || carry s || (16 <=? (if (9 <? acc s) || carry s then acc s + 6 else acc s))).
+  let acc_with_carry := acc s + (if carry s then 1 else 0) in
+  let needs_adjust := 9 <? acc_with_carry in
+  let adjusted := if needs_adjust then acc_with_carry + 6 else acc_with_carry in
+  acc s' = nibble_of_nat adjusted /\
+  carry s' = (16 <=? adjusted).
 Proof. intros; simpl; split; reflexivity. Qed.
 
 (* --- Page-relative control flow utilities (spec-accurate bases) --- *)
@@ -4371,7 +4520,7 @@ Proof.
   set (selr := mkRAMSel chip rno lo) in *.
   set (s1 := mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
                      (ram_sys s) (cur_bank s) selr
-                     (rom_ports s) hi (rom s) (test_pin s) (prog_pulses s)).
+                     (rom_ports s) hi (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)).
   assert (Hs1_props: cur_bank s1 = cur_bank s /\ sel_ram s1 = selr /\ ram_sys s1 = ram_sys s /\ acc s1 = acc s).
   { subst s1. simpl. auto. }
   destruct Hs1_props as [Hs1_bank [Hs1_sel [Hs1_ram Hs1_acc]]].
@@ -4380,7 +4529,7 @@ Proof.
   destruct Hsel_bounds as [Hsel_chip [Hsel_reg Hsel_char]].
   set (s2 := mkState (acc s1) (regs s1) (carry s1) (pc_inc1 s1) (stack s1)
                      (ram_write_main_sys s1 (acc s1)) (cur_bank s1) (sel_ram s1)
-                     (rom_ports s1) (sel_rom s1) (rom s1) (test_pin s1) (prog_pulses s1)).
+                     (rom_ports s1) (sel_rom s1) (rom s1) (test_pin s1) (prom_addr s1) (prom_data s1) (prom_enable s1)).
   assert (Hs1_WF: WF s1).
   { subst s1 selr. unfold WF. simpl.
     split. exact Hregs_len.
