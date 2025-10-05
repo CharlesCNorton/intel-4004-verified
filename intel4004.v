@@ -15,30 +15,43 @@ Import ListNotations.
 
 (* ===================== Basic bit-width types ======================== *)
 
+(** Type alias for 4-bit values (0-15). No inherent bounds enforcement. *)
 Definition nibble := nat.
+
+(** Normalizes arbitrary nat to 4-bit range via mod 16. *)
 Definition nibble_of_nat (n : nat) : nibble := n mod 16.
 
+(** Type alias for 8-bit values (0-255). No inherent bounds enforcement. *)
 Definition byte := nat.
+
+(** Normalizes arbitrary nat to 8-bit range via mod 256. *)
 Definition byte_of_nat (n : nat) : byte := n mod 256.
 
+(** Type alias for 12-bit addresses (0-4095). No inherent bounds enforcement. *)
 Definition addr12 := nat.
+
+(** Normalizes arbitrary nat to 12-bit address space via mod 4096. *)
 Definition addr12_of_nat (n : nat) : addr12 := n mod 4096.
 
+(** Proves addr12_of_nat always produces values strictly less than 4096. *)
 Lemma addr12_bound : forall n, addr12_of_nat n < 4096.
 Proof.
   intro n. unfold addr12_of_nat. apply Nat.mod_upper_bound. lia.
 Qed.
 
+(** Proves nibble_of_nat always produces values strictly less than 16. *)
 Lemma nibble_lt16 : forall n, nibble_of_nat n < 16.
 Proof. intro n. unfold nibble_of_nat. apply Nat.mod_upper_bound. lia. Qed.
 
 (* ========================= List helpers ============================= *)
 
+(** Updates list element at index n with x. Returns unchanged list if n >= length. *)
 Definition update_nth {A} (n : nat) (x : A) (l : list A) : list A :=
   if n <? length l
   then firstn n l ++ x :: skipn (S n) l
   else l.
 
+(** Proves update_nth preserves list length regardless of index validity. *)
 Lemma update_nth_length : forall A (l : list A) n x,
   length (update_nth n x l) = length l.
 Proof.
@@ -63,6 +76,7 @@ Proof.
       * reflexivity.
 Qed.
 
+(** Proves Forall P is preserved when taking first n elements of list. *)
 Lemma Forall_firstn : forall A (P:A->Prop) n (l:list A),
   Forall P l -> Forall P (firstn n l).
 Proof.
@@ -74,6 +88,7 @@ Proof.
     + constructor; auto.
 Qed.
 
+(** Proves Forall P is preserved when skipping first n elements of list. *)
 Lemma Forall_skipn : forall A (P:A->Prop) n (l:list A),
   Forall P l -> Forall P (skipn n l).
 Proof.
@@ -85,6 +100,7 @@ Proof.
     + auto.
 Qed.
 
+(** Proves Forall P is preserved by update_nth when replacement element satisfies P. *)
 Lemma Forall_update_nth : forall A (P:A->Prop) n x (l:list A),
   Forall P l -> P x -> Forall P (update_nth n x l).
 Proof.
@@ -98,6 +114,7 @@ Proof.
   - assumption.
 Qed.
 
+(** Proves nth of update_nth at same index returns the updated element. *)
 Lemma nth_update_nth_eq : forall A (l : list A) n x d,
   n < length l ->
   nth n (update_nth n x l) d = x.
@@ -113,6 +130,7 @@ Proof.
   - rewrite firstn_length_le by lia. lia.
 Qed.
 
+(** Proves nth of list satisfying Forall bound also satisfies bound (with default). *)
 Lemma nth_Forall_lt : forall (l:list nat) d n k,
   Forall (fun x => x < k) l -> d < k -> nth n l d < k.
 Proof.
@@ -120,11 +138,13 @@ Proof.
   induction Hall; intros [|n]; simpl; auto.
 Qed.
 
+(** Proves Forall P holds for repeat x n when P x holds. *)
 Lemma Forall_repeat : forall A (P : A -> Prop) x n, P x -> Forall P (repeat x n).
 Proof.
   intros A P x n H. induction n; simpl; constructor; auto.
 Qed.
 
+(** Decides whether nth n l d is actually in l or equals the default d. *)
 Lemma nth_in_or_default : forall A (n : nat) (l : list A) (d : A),
   {In (nth n l d) l} + {nth n l d = d}.
 Proof.
@@ -140,21 +160,24 @@ Qed.
 
 (* ======================== 4002 RAM structure ======================== *)
 
+(** 4002 RAM register: 16 main characters + 4 status characters. No bounds enforced. *)
 Record RAMReg := mkRAMReg {
   reg_main   : list nibble;  (* 16 main characters *)
   reg_status : list nibble   (* 4 status characters S0..S3 *)
 }.
 
+(** 4002 RAM chip: 4 registers + 4-bit output port. No bounds enforced. *)
 Record RAMChip := mkRAMChip {
   chip_regs  : list RAMReg;  (* 4 registers *)
   chip_port  : nibble        (* 4-bit output port *)
 }.
 
+(** 4002 RAM bank: 4 chips. No bounds enforced. *)
 Record RAMBank := mkRAMBank {
   bank_chips : list RAMChip  (* 4 chips per bank *)
 }.
 
-(* Selection latched by SRC; bank is selected by DCL separately. *)
+(** RAM address selection state. Chip/reg latched by SRC; bank by DCL. No bounds enforced. *)
 Record RAMSel := mkRAMSel {
   sel_chip : nat;   (* 0..3 *)
   sel_reg  : nat;   (* 0..3 *)
@@ -163,6 +186,7 @@ Record RAMSel := mkRAMSel {
 
 (* ============================ State ================================= *)
 
+(** Complete Intel 4004 + MCS-4 system state. 17 fields. No bounds enforced by types. *)
 Record Intel4004State := mkState {
   acc       : nibble;           (* 4-bit accumulator *)
   regs      : list nibble;      (* 16 4-bit registers R0..R15 *)
@@ -183,21 +207,25 @@ Record Intel4004State := mkState {
 
 (* =========================== Registers ============================== *)
 
+(** Reads register r. Returns 0 if r >= length of register file. *)
 Definition get_reg (s : Intel4004State) (r : nat) : nibble :=
   nth r (regs s) 0.
 
+(** Sets register r to normalized value v. Preserves all other state fields. *)
 Definition set_reg (s : Intel4004State) (r : nat) (v : nibble) : Intel4004State :=
   let new_regs := update_nth r (nibble_of_nat v) (regs s) in
   mkState (acc s) new_regs (carry s) (pc s) (stack s)
           (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
           (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s).
 
+(** Reads register pair starting at r (rounds down to even). Returns high*16 + low. *)
 Definition get_reg_pair (s : Intel4004State) (r : nat) : byte :=
   let r_even := r - (r mod 2) in
   let high := get_reg s r_even in
   let low  := get_reg s (r_even + 1) in
   (high * 16) + low.
 
+(** Sets register pair starting at r (rounds down to even) to v split into high/low nibbles. *)
 Definition set_reg_pair (s : Intel4004State) (r : nat) (v : byte) : Intel4004State :=
   let r_even := r - (r mod 2) in
   let high := v / 16 in
@@ -205,10 +233,12 @@ Definition set_reg_pair (s : Intel4004State) (r : nat) (v : byte) : Intel4004Sta
   let s1 := set_reg s r_even high in
   set_reg s1 (r_even + 1) low.
 
+(** Proves set_reg preserves register file length. *)
 Lemma set_reg_preserves_length : forall s r v,
   length (regs (set_reg s r v)) = length (regs s).
 Proof. intros. simpl. apply update_nth_length. Qed.
 
+(** Proves set_reg_pair preserves register file length. *)
 Lemma set_reg_pair_preserves_length : forall s r v,
   length (regs (set_reg_pair s r v)) = length (regs s).
 Proof.
@@ -218,6 +248,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves set_reg preserves Forall (< 16) bound on registers. *)
 Lemma set_reg_preserves_Forall16 : forall s r v,
   Forall (fun x => x < 16) (regs s) ->
   Forall (fun x => x < 16) (regs (set_reg s r v)).
@@ -225,6 +256,7 @@ Proof.
   intros. simpl. eapply Forall_update_nth; eauto. apply nibble_lt16.
 Qed.
 
+(** Proves set_reg_pair preserves Forall (< 16) bound on registers. *)
 Lemma set_reg_pair_preserves_Forall16 : forall s r v,
   Forall (fun x => x < 16) (regs s) ->
   Forall (fun x => x < 16) (regs (set_reg_pair s r v)).
@@ -235,6 +267,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves nth of bounded register file with default 0 is also bounded. *)
 Lemma nth_reg0_lt16 : forall s n,
   Forall (fun x => x < 16) (regs s) ->
   nth n (regs s) 0 < 16.
@@ -242,6 +275,7 @@ Proof. intros. eapply nth_Forall_lt with (k:=16); eauto; lia. Qed.
 
 (* ============================= Stack ================================ *)
 
+(** Pushes addr onto 3-level stack. Discards bottom level if full. *)
 Definition push_stack (s : Intel4004State) (addr : addr12) : Intel4004State :=
   let new_stack :=
     match stack s with
@@ -254,6 +288,7 @@ Definition push_stack (s : Intel4004State) (addr : addr12) : Intel4004State :=
           (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
           (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s).
 
+(** Pops top address from stack. Returns None if stack empty. *)
 Definition pop_stack (s : Intel4004State) : (option addr12 * Intel4004State) :=
   match stack s with
   | [] => (None, s)
@@ -263,10 +298,12 @@ Definition pop_stack (s : Intel4004State) : (option addr12 * Intel4004State) :=
                        (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
   end.
 
+(** Proves push_stack always produces stack of length <= 3. *)
 Lemma push_stack_len_le3 : forall s a,
   length (stack (push_stack s a)) <= 3.
 Proof. intros s a. unfold push_stack. destruct (stack s) as [|x [|x0 [|x1 l]]]; simpl; lia. Qed.
 
+(** Proves pop_stack preserves stack length bound <= 3 when input <= 4. *)
 Lemma pop_stack_len_le3 : forall s x s',
   length (stack s) <= 4 ->
   pop_stack s = (x, s') -> length (stack s') <= 3.
@@ -287,6 +324,7 @@ Proof.
                subst. simpl in Hlen. lia.
 Qed.
 
+(** Proves pop_stack preserves Forall (< 4096) on stack addresses. *)
 Lemma pop_stack_Forall_addr12 : forall s a s',
   Forall (fun x => x < 4096) (stack s) ->
   pop_stack s = (a, s') ->
@@ -300,63 +338,81 @@ Qed.
 
 (* ============================ ROM =================================== *)
 
+(** Fetches byte from ROM at addr. Returns 0 if addr >= ROM length. *)
 Definition fetch_byte (s : Intel4004State) (addr : addr12) : byte :=
   nth addr (rom s) 0.
 
+(** Increments PC by 1, normalized to 12-bit address space. *)
 Definition pc_inc1 (s : Intel4004State) : addr12 := addr12_of_nat (pc s + 1).
+
+(** Increments PC by 2, normalized to 12-bit address space. *)
 Definition pc_inc2 (s : Intel4004State) : addr12 := addr12_of_nat (pc s + 2).
 
+(** Extracts page number (upper 4 bits) from 12-bit address. *)
 Definition page_of (p:addr12) := p / 256.
+
+(** Computes base address of page containing p. *)
 Definition page_base (p:addr12) := (page_of p) * 256.
 
 (* ========================= RAM navigation =========================== *)
 
-(* Constants: 4 banks × 4 chips × 4 regs × (16 main + 4 status) *)
+(** RAM system dimension constants. *)
 Definition NBANKS := 4.
 Definition NCHIPS := 4.
 Definition NREGS  := 4.
 Definition NMAIN  := 16.
 Definition NSTAT  := 4.
 
-(* Safe getters with defaults *)
+(** Retrieves bank b from state. Returns empty default if b >= NBANKS. *)
 Definition get_bank (s:Intel4004State) (b:nat) : RAMBank :=
   nth b (ram_sys s) (mkRAMBank (repeat (mkRAMChip (repeat (mkRAMReg (repeat 0 NMAIN) (repeat 0 NSTAT)) NREGS) 0) NCHIPS)).
 
+(** Retrieves chip c from bank. Returns empty default if c >= NCHIPS. *)
 Definition get_chip (bk:RAMBank) (c:nat) : RAMChip :=
   nth c (bank_chips bk) (mkRAMChip (repeat (mkRAMReg (repeat 0 NMAIN) (repeat 0 NSTAT)) NREGS) 0).
 
+(** Retrieves register r from chip. Returns empty default if r >= NREGS. *)
 Definition get_regRAM (ch:RAMChip) (r:nat) : RAMReg :=
   nth r (chip_regs ch) (mkRAMReg (repeat 0 NMAIN) (repeat 0 NSTAT)).
 
+(** Retrieves main character i from register. Returns 0 if i >= NMAIN. *)
 Definition get_main (rg:RAMReg) (i:nat) : nibble := nth i (reg_main rg) 0.
+
+(** Retrieves status character i from register. Returns 0 if i >= NSTAT. *)
 Definition get_stat (rg:RAMReg) (i:nat) : nibble := nth i (reg_status rg) 0.
 
-(* Nested updates *)
+(** Updates main character i in register to normalized v. *)
 Definition upd_main_in_reg (rg:RAMReg) (i:nat) (v:nibble) : RAMReg :=
   mkRAMReg (update_nth i (nibble_of_nat v) (reg_main rg)) (reg_status rg).
 
+(** Updates status character i in register to normalized v. *)
 Definition upd_stat_in_reg (rg:RAMReg) (i:nat) (v:nibble) : RAMReg :=
   mkRAMReg (reg_main rg) (update_nth i (nibble_of_nat v) (reg_status rg)).
 
+(** Updates register r in chip with new register value. *)
 Definition upd_reg_in_chip (ch:RAMChip) (r:nat) (rg:RAMReg) : RAMChip :=
   mkRAMChip (update_nth r rg (chip_regs ch)) (chip_port ch).
 
+(** Updates output port in chip to normalized v. *)
 Definition upd_port_in_chip (ch:RAMChip) (v:nibble) : RAMChip :=
   mkRAMChip (chip_regs ch) (nibble_of_nat v).
 
+(** Updates chip c in bank with new chip value. *)
 Definition upd_chip_in_bank (bk:RAMBank) (c:nat) (ch:RAMChip) : RAMBank :=
   mkRAMBank (update_nth c ch (bank_chips bk)).
 
+(** Updates bank b in system with new bank value. Returns updated bank list. *)
 Definition upd_bank_in_sys (s:Intel4004State) (b:nat) (bk:RAMBank) : list RAMBank :=
   update_nth b bk (ram_sys s).
 
-(* Read/write using the current bank and latched selection *)
+(** Reads main character from RAM using current bank and latched selection. *)
 Definition ram_read_main (s:Intel4004State) : nibble :=
   let bk := get_bank s (cur_bank s) in
   let ch := get_chip bk (sel_chip (sel_ram s)) in
   let rg := get_regRAM ch (sel_reg (sel_ram s)) in
   get_main rg (sel_char (sel_ram s)).
 
+(** Writes main character to RAM using current bank and latched selection. Returns updated bank list. *)
 Definition ram_write_main_sys (s:Intel4004State) (v:nibble) : list RAMBank :=
   let b := cur_bank s in
   let c := sel_chip (sel_ram s) in
@@ -370,6 +426,7 @@ Definition ram_write_main_sys (s:Intel4004State) (v:nibble) : list RAMBank :=
   let bk' := upd_chip_in_bank bk c ch' in
   upd_bank_in_sys s b bk'.
 
+(** Writes status character idx to RAM using current bank and latched selection. Returns updated bank list. *)
 Definition ram_write_status_sys (s:Intel4004State) (idx:nat) (v:nibble) : list RAMBank :=
   let b := cur_bank s in
   let c := sel_chip (sel_ram s) in
@@ -382,6 +439,7 @@ Definition ram_write_status_sys (s:Intel4004State) (idx:nat) (v:nibble) : list R
   let bk' := upd_chip_in_bank bk c ch' in
   upd_bank_in_sys s b bk'.
 
+(** Writes to RAM chip output port using current bank and latched chip selection. Returns updated bank list. *)
 Definition ram_write_port_sys (s:Intel4004State) (v:nibble) : list RAMBank :=
   let b := cur_bank s in
   let c := sel_chip (sel_ram s) in
@@ -393,6 +451,7 @@ Definition ram_write_port_sys (s:Intel4004State) (v:nibble) : list RAMBank :=
 
 (* =============================== ISA ================================ *)
 
+(** Intel 4004 instruction set. 43 instructions total. *)
 Inductive Instruction : Type :=
   | NOP : Instruction
   | JCN : nibble -> byte -> Instruction
@@ -441,7 +500,7 @@ Inductive Instruction : Type :=
   | KBP : Instruction
   | DCL : Instruction.
 
-(* Encode bytes -> Instruction *)
+(** Decodes two bytes into Intel 4004 instruction. Always total (returns NOP for invalid). *)
 Definition decode (b1 : byte) (b2 : byte) : Instruction :=
   let opcode := b1 / 16 in
   let operand := b1 mod 16 in
@@ -481,6 +540,7 @@ Definition decode (b1 : byte) (b2 : byte) : Instruction :=
 
 (* ========================== ENCODE ================================= *)
 
+(** Encodes instruction to two-byte representation. Inverse of decode for well-formed instructions. *)
 Definition encode (i:Instruction) : byte * byte :=
   match i with
   | NOP => (0,0)
@@ -509,7 +569,7 @@ Definition encode (i:Instruction) : byte * byte :=
   | KBP      => (252,0) | DCL => (253,0)
   end.
 
-(* Instruction well-formedness for encoding roundtrip & execution params *)
+(** Well-formedness predicate for instructions. Ensures parameters are in valid ranges. *)
 Definition instr_wf (i:Instruction) : Prop :=
   match i with
   | JCN c a => c < 16 /\ a < 256
@@ -525,16 +585,19 @@ Definition instr_wf (i:Instruction) : Prop :=
   | _ => True
   end.
 
+(** Proves n - n mod 2 = n when n is even. *)
 Lemma even_sub_mod : forall n, n mod 2 = 0 -> n - n mod 2 = n.
 Proof.
   intros n H. rewrite H. rewrite Nat.sub_0_r. reflexivity.
 Qed.
 
+(** Proves n - n mod 2 = n - 1 when n is odd. *)
 Lemma odd_sub_mod : forall n, n mod 2 = 1 -> n - n mod 2 = n - 1.
 Proof.
   intros n H. rewrite H. reflexivity.
 Qed.
 
+(** Proves (n - n mod 2) + 1 < 16 for odd n < 16. *)
 Lemma odd_range_helper : forall n, n < 16 -> n mod 2 = 1 -> (n - n mod 2) + 1 < 16.
 Proof.
   intros n Hn Hodd.
@@ -542,6 +605,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves every natural number is either even or odd. *)
 Lemma mod2_cases : forall n, n mod 2 = 0 \/ n mod 2 = 1.
 Proof.
   intros n. pose proof (Nat.mod_upper_bound n 2).
@@ -550,6 +614,7 @@ Proof.
   destruct n0; auto. lia.
 Qed.
 
+(** Proves decode correctly interprets all even opcode 2 variants as FIM with correct register indices. *)
 Lemma decode_2_concrete_even : forall b,
   b < 256 ->
   decode 32 b = FIM 0 b /\
@@ -566,6 +631,7 @@ Proof.
   repeat split; reflexivity.
 Qed.
 
+(** Proves encode-decode roundtrip for SRC instruction with odd register indices. *)
 Lemma src_encode_decode : forall n,
   n < 16 -> n mod 2 = 1 ->
   decode (32 + (((n - n mod 2) + 1) mod 16)) 0 = SRC n.
@@ -607,6 +673,7 @@ Proof.
   destruct H as [H|[H|[H|[H|[H|[H|[H|H]]]]]]]; subst; reflexivity.
 Qed.
 
+(** Proves encode-decode roundtrip for FIN instruction with even register indices. *)
 Lemma fin_encode_decode : forall n,
   n < 16 -> n mod 2 = 0 ->
   decode (48 + ((n - n mod 2) mod 16)) 0 = FIN n.
@@ -644,6 +711,7 @@ Proof.
   destruct H as [H|[H|[H|[H|[H|[H|[H|H]]]]]]]; subst; reflexivity.
 Qed.
 
+(** Proves encode-decode roundtrip for JIN instruction with odd register indices. *)
 Lemma jin_encode_decode : forall n,
   n < 16 -> n mod 2 = 1 ->
   decode (48 + (((n - n mod 2) + 1) mod 16)) 0 = JIN n.
@@ -685,6 +753,7 @@ Proof.
   destruct H as [H|[H|[H|[H|[H|[H|[H|H]]]]]]]; subst; reflexivity.
 Qed.
 
+(** Proves division-modulo identity for base 256. *)
 Lemma divmod_representation : forall a,
   a = 256 * (a / 256) + a mod 256.
 Proof.
@@ -693,6 +762,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves adding multiple of n doesn't change result mod n. *)
 Lemma mod_add_multiple : forall a b n,
   n <> 0 ->
   (n * a + b) mod n = b mod n.
@@ -709,6 +779,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves division-modulo reconstruction identity for base 256. *)
 Lemma div_256_mul_256_add_mod_256_eq : forall a,
   (a / 256) * 256 + a mod 256 = a.
 Proof.
@@ -719,6 +790,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves addr12_of_nat is identity for values already in 12-bit range. *)
 Lemma addr12_of_nat_mod_small : forall n,
   n < 4096 ->
   addr12_of_nat n = n.
@@ -729,6 +801,7 @@ Proof.
   exact Hn.
 Qed.
 
+(** Proves existence of quotient-remainder representation for any nat. *)
 Lemma divmod_sum_eq : forall a,
   exists q r, a = q * 256 + r /\ r < 256 /\ q = a / 256 /\ r = a mod 256.
 Proof.
@@ -742,6 +815,7 @@ Proof.
     + split; reflexivity.
 Qed.
 
+(** Proves addr12_of_nat reconstructs 12-bit address from page and offset. *)
 Lemma addr12_reconstruction : forall a q r,
   a < 4096 ->
   a = q * 256 + r ->
@@ -755,6 +829,7 @@ Proof.
   exact Ha.
 Qed.
 
+(** Proves addr12_of_nat with explicit div/mod is identity for 12-bit values. *)
 Lemma addr12_div_mod_identity : forall a,
   a < 4096 ->
   addr12_of_nat ((a / 256) * 256 + a mod 256) = a.
@@ -767,6 +842,7 @@ Proof.
   - apply Nat.mod_upper_bound. lia.
 Qed.
 
+(** Proves encoding arithmetic for JUN/JMS opcodes produces correct div/mod results. *)
 Lemma jun_jms_encode_helper : forall a,
   a < 4096 ->
   (64 + (a / 256)) / 16 = 4 /\
@@ -808,6 +884,7 @@ Proof.
     exact Hdiv.
 Qed.
 
+(** Proves encode-decode roundtrip for FIM instruction. *)
 Lemma fim_encode_decode : forall n b,
   n < 16 -> n mod 2 = 0 -> b < 256 ->
   decode (32 + ((n - n mod 2) mod 16)) (b mod 256) = FIM n b.
@@ -840,6 +917,7 @@ Proof.
   destruct H as [H|[H|[H|[H|[H|[H|[H|H]]]]]]]; subst; reflexivity.
 Qed.
 
+(** Main encode-decode bijection theorem: decode (encode i) = i for all well-formed instructions. *)
 Lemma decode_encode_id : forall i, instr_wf i -> let '(b1,b2) := encode i in decode b1 b2 = i.
 Proof.
   intros i Hwf. destruct i; simpl in *; try reflexivity; try lia.
@@ -1043,13 +1121,13 @@ Qed.
 
 (* ============================ Semantics ============================= *)
 
-(* Helpers to compute the page base to use (quirks/spec accurate):
-   - FIN/JIN are 1-byte but use the page of PC+1 (next instruction).
-   - JCN/ISZ are 2-byte and branch within the page of PC+2 (after the instruction).
-*)
+(** Computes page base for PC+1. Used by 1-byte indirect jumps (FIN/JIN). *)
 Definition base_for_next1 (s:Intel4004State) := page_base (pc_inc1 s).
+
+(** Computes page base for PC+2. Used by 2-byte conditional branches (JCN/ISZ). *)
 Definition base_for_next2 (s:Intel4004State) := page_base (pc_inc2 s).
 
+(** Executes single instruction. Returns new state. Total function (handles all 43 instructions). *)
 Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
   match inst with
   | NOP =>
@@ -1400,12 +1478,14 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
 
 (* ======================= Small-step machine ========================= *)
 
+(** Executes one fetch-decode-execute cycle. *)
 Definition step (s : Intel4004State) : Intel4004State :=
   let b1 := fetch_byte s (pc s) in
   let b2 := fetch_byte s (addr12_of_nat (pc s + 1)) in
   let inst := decode b1 b2 in
   execute s inst.
 
+(** Executes n steps. Defined tail-recursively (steps from current state). *)
 Fixpoint steps (n : nat) (s : Intel4004State) : Intel4004State :=
   match n with
   | 0 => s
@@ -1414,40 +1494,53 @@ Fixpoint steps (n : nat) (s : Intel4004State) : Intel4004State :=
 
 (* ========================== Initial / Reset ========================= *)
 
+(** Empty RAM register: all zeros. *)
 Definition empty_reg : RAMReg := mkRAMReg (repeat 0 NMAIN) (repeat 0 NSTAT).
+
+(** Empty RAM chip: 4 empty registers, port 0. *)
 Definition empty_chip : RAMChip := mkRAMChip (repeat empty_reg NREGS) 0.
+
+(** Empty RAM bank: 4 empty chips. *)
 Definition empty_bank : RAMBank := mkRAMBank (repeat empty_chip NCHIPS).
+
+(** Empty RAM system: 4 empty banks. *)
 Definition empty_sys : list RAMBank := repeat empty_bank NBANKS.
 
+(** Initial power-on state: all zeros, empty RAM, empty ROM. *)
 Definition init_state : Intel4004State :=
   mkState 0 (repeat 0 16) false 0 [] empty_sys 0 (mkRAMSel 0 0 0)
           (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
 
+(** Reset state: clears CPU state but preserves RAM and ROM. *)
 Definition reset_state (s:Intel4004State) : Intel4004State :=
   mkState 0 (regs s) false 0 [] (ram_sys s) 0 (mkRAMSel 0 0 0)
           (repeat 0 16) 0 (rom s) false 0 0 false.
 
 (* ======================== Well-formedness =========================== *)
 
-(* Shapes and bounds for the RAM system *)
+(** Well-formedness for RAM register: correct lengths and all nibbles bounded. *)
 Definition WF_reg (rg:RAMReg) : Prop :=
   length (reg_main rg) = NMAIN /\
   Forall (fun x => x < 16) (reg_main rg) /\
   length (reg_status rg) = NSTAT /\
   Forall (fun x => x < 16) (reg_status rg).
 
+(** Well-formedness for RAM chip: correct length, all registers WF, port bounded. *)
 Definition WF_chip (ch:RAMChip) : Prop :=
   length (chip_regs ch) = NREGS /\
   Forall WF_reg (chip_regs ch) /\
   chip_port ch < 16.
 
+(** Well-formedness for RAM bank: correct length and all chips WF. *)
 Definition WF_bank (bk:RAMBank) : Prop :=
   length (bank_chips bk) = NCHIPS /\
   Forall WF_chip (bank_chips bk).
 
+(** Well-formedness for RAM selection: all indices in valid ranges. *)
 Definition WF_sel (sr:RAMSel) : Prop :=
   sel_chip sr < NCHIPS /\ sel_reg sr < NREGS /\ sel_char sr < NMAIN.
 
+(** Main well-formedness invariant: all state fields have correct shapes and bounds. *)
 Definition WF (s : Intel4004State) : Prop :=
   length (regs s) = 16 /\
   Forall (fun x => x < 16) (regs s) /\
@@ -1467,8 +1560,7 @@ Definition WF (s : Intel4004State) : Prop :=
   prom_addr s < 4096 /\
   prom_data s < 256.
 
-(* Helper lemmas for init_state_WF *)
-
+(** Proves repeat 0 n satisfies Forall (< 16). *)
 Lemma repeat_0_lt_16 : forall n, Forall (fun x => x < 16) (repeat 0 n).
 Proof.
   intros n.
@@ -1476,6 +1568,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves repeat 0 n satisfies Forall (< 256). *)
 Lemma repeat_0_lt_256 : forall n, Forall (fun x => x < 256) (repeat 0 n).
 Proof.
   intros n.
@@ -1483,6 +1576,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves empty RAM register satisfies WF_reg. *)
 Lemma empty_reg_WF : WF_reg empty_reg.
 Proof.
   unfold WF_reg, empty_reg.
@@ -1493,6 +1587,7 @@ Proof.
   - repeat constructor.
 Qed.
 
+(** Proves repeat empty_reg n satisfies Forall WF_reg. *)
 Lemma repeat_empty_reg_WF : forall n, Forall WF_reg (repeat empty_reg n).
 Proof.
   intros n.
@@ -1500,6 +1595,7 @@ Proof.
   apply empty_reg_WF.
 Qed.
 
+(** Proves empty RAM chip satisfies WF_chip. *)
 Lemma empty_chip_WF : WF_chip empty_chip.
 Proof.
   unfold WF_chip, empty_chip.
@@ -1509,6 +1605,7 @@ Proof.
   repeat constructor; apply empty_reg_WF.
 Qed.
 
+(** Proves repeat empty_chip n satisfies Forall WF_chip. *)
 Lemma repeat_empty_chip_WF : forall n, Forall WF_chip (repeat empty_chip n).
 Proof.
   intros n.
@@ -1516,6 +1613,7 @@ Proof.
   apply empty_chip_WF.
 Qed.
 
+(** Proves empty RAM bank satisfies WF_bank. *)
 Lemma empty_bank_WF : WF_bank empty_bank.
 Proof.
   unfold WF_bank, empty_bank.
@@ -1525,6 +1623,7 @@ Proof.
   repeat constructor; apply empty_chip_WF.
 Qed.
 
+(** Proves repeat empty_bank n satisfies Forall WF_bank. *)
 Lemma repeat_empty_bank_WF : forall n, Forall WF_bank (repeat empty_bank n).
 Proof.
   intros n.
@@ -1532,6 +1631,7 @@ Proof.
   apply empty_bank_WF.
 Qed.
 
+(** Proves default RAM selection (0,0,0) satisfies WF_sel. *)
 Lemma default_sel_WF : WF_sel (mkRAMSel 0 0 0).
 Proof.
   unfold WF_sel.
@@ -1540,6 +1640,7 @@ Proof.
   repeat split; lia.
 Qed.
 
+(** Proves init_state satisfies WF. *)
 Lemma init_state_WF : WF init_state.
 Proof.
   unfold WF, init_state.
@@ -1566,7 +1667,7 @@ Qed.
 
 (* ====================== Preservation lemmas ========================= *)
 
-(* Structural helpers about updates preserving shapes and <16 *)
+(** Proves updating main character in WF register preserves WF_reg. *)
 Lemma WF_reg_upd_main : forall rg i v,
   WF_reg rg -> WF_reg (upd_main_in_reg rg i v).
 Proof.
@@ -1579,6 +1680,7 @@ Proof.
   - assumption.
 Qed.
 
+(** Proves updating status character in WF register preserves WF_reg. *)
 Lemma WF_reg_upd_stat : forall rg i v,
   WF_reg rg -> WF_reg (upd_stat_in_reg rg i v).
 Proof.
@@ -1602,6 +1704,7 @@ Proof.
   - assumption.
 Qed.
 
+(** Proves updating port in WF chip preserves WF_chip. *)
 Lemma WF_chip_upd_port : forall ch v,
   WF_chip ch -> WF_chip (upd_port_in_chip ch v).
 Proof.
@@ -1610,6 +1713,7 @@ Proof.
   apply nibble_lt16.
 Qed.
 
+(** Proves updating chip in WF bank preserves WF_bank. *)
 Lemma WF_bank_upd_chip : forall bk c ch,
   WF_bank bk -> WF_chip ch -> WF_bank (upd_chip_in_bank bk c ch).
 Proof.
@@ -1620,6 +1724,7 @@ Proof.
   - eapply Forall_update_nth; eauto.
 Qed.
 
+(** Proves updating bank in WF system preserves length and Forall WF_bank. *)
 Lemma WF_sys_upd_bank : forall s b bk,
   WF s -> WF_bank bk -> length (upd_bank_in_sys s b bk) = NBANKS /\
                          Forall WF_bank (upd_bank_in_sys s b bk).
@@ -1634,6 +1739,7 @@ Qed.
 
 (* ==================== RAM read-after-write lemmas =================== *)
 
+(** Proves reading main character after write returns normalized written value. *)
 Lemma get_main_upd_main_in_reg : forall rg i v,
   WF_reg rg ->
   i < NMAIN ->
@@ -1645,6 +1751,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves reading register after update returns the updated register. *)
 Lemma get_regRAM_upd_reg_in_chip : forall ch r rg,
   WF_chip ch ->
   r < NREGS ->
@@ -1656,6 +1763,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves reading chip after update returns the updated chip. *)
 Lemma get_chip_upd_chip_in_bank : forall bk c ch,
   WF_bank bk ->
   c < NCHIPS ->
@@ -1667,6 +1775,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves reading bank after update returns the updated bank. *)
 Lemma get_bank_upd_bank_in_sys : forall s b bk,
   WF s ->
   b < NBANKS ->
@@ -1681,6 +1790,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves bank extracted from WF system is WF. *)
 Lemma WF_bank_from_sys : forall s b,
   WF s ->
   b < NBANKS ->
@@ -1692,6 +1802,7 @@ Proof.
   apply Hforall. eapply nth_In. lia.
 Qed.
 
+(** Proves chip extracted from WF bank is WF. *)
 Lemma WF_chip_from_bank : forall bk c,
   WF_bank bk ->
   c < NCHIPS ->
@@ -1702,6 +1813,7 @@ Proof.
   apply Hforall. eapply nth_In. lia.
 Qed.
 
+(** Proves register extracted from WF chip is WF. *)
 Lemma WF_reg_from_chip : forall ch r,
   WF_chip ch ->
   r < NREGS ->
@@ -1712,6 +1824,7 @@ Proof.
   apply Hforall. eapply nth_In. lia.
 Qed.
 
+(** Main RAM read-after-write correctness: reading main RAM returns normalized written value. *)
 Lemma ram_write_then_read_main : forall s v,
   WF s ->
   cur_bank s < NBANKS ->
@@ -1741,7 +1854,7 @@ Qed.
 
 (* ====================== Execute preserves WF ======================== *)
 
-(* Helper lemma: opcode 0 (NOP) is always True *)
+(** Proves decode with opcode 0 produces well-formed instruction (always NOP). *)
 Lemma decode_opcode_0_wf : forall b1 b2,
   b1 / 16 = 0 ->
   match decode b1 b2 with
@@ -1752,7 +1865,7 @@ Proof.
   intros b1 b2 H. unfold decode. rewrite H. simpl. trivial.
 Qed.
 
-(* Helper lemma: opcode 1 (JCN) is always True *)
+(** Proves decode with opcode 1 produces well-formed instruction (always JCN). *)
 Lemma decode_opcode_1_wf : forall b1 b2,
   b1 / 16 = 1 ->
   match decode b1 b2 with
@@ -1763,13 +1876,13 @@ Proof.
   intros b1 b2 H. unfold decode. rewrite H. simpl. trivial.
 Qed.
 
-(* Helper: neither FIM nor SRC match JUN/JMS *)
+(** Proves FIM and SRC never decode as JUN or JMS. *)
 Lemma fim_src_not_jun_jms : forall r b,
   match FIM r b with | JUN _ | JMS _ => False | _ => True end /\
   match SRC r with | JUN _ | JMS _ => False | _ => True end.
 Proof. intros; split; exact I. Qed.
 
-(* Helper lemma: opcode 2 (FIM or SRC) is always True *)
+(** Proves decode with opcode 2 produces well-formed instruction (FIM or SRC). *)
 Lemma decode_opcode_2_wf : forall b1 b2,
   b1 / 16 = 2 ->
   match decode b1 b2 with
@@ -1784,13 +1897,13 @@ Proof.
   [exact H1 | exact H2].
 Qed.
 
-(* Helper: neither FIN nor JIN match JUN/JMS *)
+(** Proves FIN and JIN never decode as JUN or JMS. *)
 Lemma fin_jin_not_jun_jms : forall r,
   match FIN r with | JUN _ | JMS _ => False | _ => True end /\
   match JIN r with | JUN _ | JMS _ => False | _ => True end.
 Proof. intros; split; exact I. Qed.
 
-(* Helper lemma: opcode 3 (FIN or JIN) is always True *)
+(** Proves decode with opcode 3 produces well-formed instruction (FIN or JIN). *)
 Lemma decode_opcode_3_wf : forall b1 b2,
   b1 / 16 = 3 ->
   match decode b1 b2 with
@@ -1805,7 +1918,7 @@ Proof.
   [exact H1 | exact H2].
 Qed.
 
-(* Helper lemma: opcode 4 (JUN) satisfies the bound *)
+(** Proves decode with opcode 4 produces well-formed JUN with bounded address. *)
 Lemma decode_opcode_4_wf : forall b1 b2,
   b1 / 16 = 4 ->
   match decode b1 b2 with
@@ -1817,7 +1930,7 @@ Proof.
   apply addr12_bound.
 Qed.
 
-(* Helper lemma: opcode 5 (JMS) satisfies the bound *)
+(** Proves decode with opcode 5 produces well-formed JMS with bounded address. *)
 Lemma decode_opcode_5_wf : forall b1 b2,
   b1 / 16 = 5 ->
   match decode b1 b2 with
@@ -1829,7 +1942,7 @@ Proof.
   apply addr12_bound.
 Qed.
 
-(* Helper lemma: opcodes 6-13 are always True *)
+(** Proves decode with opcodes 6-13 produces well-formed instructions (never JUN/JMS). *)
 Lemma decode_opcode_6_to_13_wf : forall b1 b2 n,
   6 <= n <= 13 ->
   b1 / 16 = n ->
@@ -1856,7 +1969,7 @@ Proof.
   lia.
 Qed.
 
-(* Helper lemma: opcode 14 instructions never match JUN/JMS *)
+(** Proves decode with opcode 14 never produces JUN or JMS. *)
 Lemma opcode_14_not_jun_jms : forall b1 b2,
   b1 / 16 = 14 ->
   match decode b1 b2 with
@@ -1905,6 +2018,7 @@ Proof.
 Qed.
 
 (* Helper: opcodes 6-13 never produce JUN/JMS *)
+(* Opcodes 6-13 (INC through ADD) never decode to absolute jumps. *)
 Lemma decode_opcodes_6_to_13_not_jun_jms : forall b1 b2,
   6 <= b1 / 16 <= 13 ->
   match decode b1 b2 with
@@ -1921,6 +2035,7 @@ Proof.
 Qed.
 
 (* Helper: opcodes >= 16 produce NOP, never JUN/JMS *)
+(* Out-of-range opcodes (≥16) decode to NOP, never produce absolute jumps. *)
 Lemma decode_opcode_16_plus_not_jun_jms : forall b1 b2,
   b1 / 16 >= 16 ->
   match decode b1 b2 with
@@ -1949,6 +2064,7 @@ Proof.
 Qed.
 
 (* Decode params are wf enough for absolute JUN/JMS *)
+(* All decoded JUN/JMS instructions have 12-bit addresses < 4096. *)
 Lemma decode_instr_wf_jun_jms : forall b1 b2,
   match decode b1 b2 with
   | JUN a | JMS a => a < 4096
@@ -1993,6 +2109,7 @@ Proof.
 Qed.
 
 (* Helper lemma for mod 16 bounds *)
+(* Modulo 16 always yields values strictly less than 16. *)
 Lemma mod_16_lt : forall n, n mod 16 < 16.
 Proof. intro n. apply Nat.mod_upper_bound. lia. Qed.
 
@@ -2010,6 +2127,7 @@ Proof.
 Qed.
 
 (* Simplification lemma for mod expressions *)
+(* Nested modulo simplification: (n mod 16) mod 2 = n mod 2. *)
 Lemma mod_16_mod_2_eq : forall n, (n mod 16) mod 2 = n mod 2.
 Proof.
   intro n.
@@ -3208,6 +3326,7 @@ Proof.
     assumption.
 Qed.
 
+(* Stack pop preserves all state fields except stack itself. *)
 Lemma pop_stack_preserves_fields : forall s opt_addr s',
   pop_stack s = (opt_addr, s') ->
   regs s' = regs s /\
@@ -3231,6 +3350,7 @@ Proof.
     repeat split; reflexivity.
 Qed.
 
+(* Popped address respects 12-bit bound if stack was well-formed. *)
 Lemma pop_stack_preserves_addr_bound : forall s opt_addr s',
   pop_stack s = (opt_addr, s') ->
   Forall (fun a => a < 4096) (stack s) ->
@@ -3304,6 +3424,7 @@ Proof.
     assumption.
 Qed.
 
+(* Writing to main RAM preserves system-level bank count invariant. *)
 Lemma ram_write_main_sys_preserves_len : forall s v,
   WF s -> length (ram_write_main_sys s v) = NBANKS.
 Proof.
@@ -3321,6 +3442,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(* Writing to main RAM preserves well-formedness of all banks. *)
 Lemma ram_write_main_sys_preserves_WF_bank : forall s v,
   WF s -> Forall WF_bank (ram_write_main_sys s v).
 Proof.
@@ -3418,6 +3540,7 @@ Proof.
   apply Forall_update_nth; auto.
 Qed.
 
+(* Reading from main RAM under WF yields 4-bit value. *)
 Lemma ram_read_main_bound : forall s,
   WF s ->
   ram_read_main s < 16.
@@ -3435,6 +3558,7 @@ Proof.
   eapply nth_Forall_lt; eauto; lia.
 Qed.
 
+(* Reading from status RAM under WF yields 4-bit value. *)
 Lemma get_stat_bound : forall s,
   WF s ->
   forall idx,
@@ -3925,6 +4049,7 @@ Proof.
   assumption.
 Qed.
 
+(** Main preservation theorem: execute preserves WF for all well-formed instructions. *)
 Theorem execute_preserves_WF :
   forall s i, WF s -> instr_wf i -> WF (execute s i).
 Proof.
@@ -3978,6 +4103,7 @@ Proof.
   - apply execute_DCL_WF; assumption.
 Qed.
 
+(** Proves single step (fetch-decode-execute) preserves WF. *)
 Theorem step_preserves_WF : forall s, WF s -> WF (step s).
 Proof.
   intros s Hwf. unfold step.
@@ -3999,18 +4125,21 @@ Proof.
     + rewrite Hdef. lia.
 Qed.
 
+(** Proves n-step execution preserves WF. *)
 Theorem steps_preserve_WF : forall n s, WF s -> WF (steps n s).
 Proof.
   induction n; simpl; intros; auto. apply IHn. apply step_preserves_WF; assumption.
 Qed.
 
-(* ======================== Sanity theorems =========================== *)
+(* ==================== Behavioral correctness theorems ==================== *)
 
+(* NOP preserves all state except incrementing PC. *)
 Theorem nop_preserves_state : forall s,
   let s' := execute s NOP in
   acc s' = acc s /\ regs s' = regs s /\ carry s' = carry s /\ pc s' = addr12_of_nat (pc s + 1).
 Proof. intros s. simpl. repeat split; reflexivity. Qed.
 
+(* LDM loads immediate value into accumulator. *)
 Theorem ldm_loads_immediate : forall s n,
   n < 16 ->
   let s' := execute s (LDM n) in
@@ -4021,21 +4150,25 @@ Proof.
   - reflexivity.
 Qed.
 
+(* CLB clears both accumulator and carry. *)
 Theorem clb_clears : forall s,
   let s' := execute s CLB in
   acc s' = 0 /\ carry s' = false /\ pc s' = addr12_of_nat (pc s + 1).
 Proof. intros s. simpl. repeat split; reflexivity. Qed.
 
 (* Carry/Link check examples *)
+(* SUB sets carry iff result did not underflow (borrow did not occur). *)
 Lemma sub_link_matches_spec : forall s r,
   let s' := execute s (SUB r) in
   carry s' = (16 <=? (acc s + 16 - get_reg s r - (if carry s then 0 else 1))).
 Proof. intros; simpl; reflexivity. Qed.
 
+(* DAC sets carry iff accumulator was non-zero (no underflow to zero). *)
 Lemma dac_link_matches_spec : forall s,
   let s' := execute s DAC in carry s' = negb (acc s =? 0).
 Proof. intros; simpl; reflexivity. Qed.
 
+(* DAA performs BCD adjustment: adds 6 if (acc+carry) > 9. *)
 Lemma daa_adjust_rule : forall s,
   let s' := execute s DAA in
   let acc_with_carry := acc s + (if carry s then 1 else 0) in
@@ -4111,6 +4244,7 @@ Qed.
 
 (* --- Determinism & PC-shape of step --- *)
 
+(* Step function is deterministic: equal inputs produce equal outputs. *)
 Theorem step_deterministic : forall s s1 s2,
   s1 = step s -> s2 = step s -> s1 = s2.
 Proof. congruence. Qed.
@@ -4421,6 +4555,7 @@ Qed.
 
 (* --- KBP mapping & TEST note --- *)
 
+(* KBP encodes single-bit positions (0,1,2,4,8) to indices (0,1,2,3,4), else 15. *)
 Lemma kbp_map_cases : forall s,
   let s' := execute s KBP in
   acc s' = match acc s with
@@ -4482,6 +4617,7 @@ Proof.
   nia.
 Qed.
 
+(* End-to-end RAM roundtrip: SRC+WRM+RDM reads back original accumulator. *)
 Lemma wrm_then_rdm_reads_back : forall s r,
   WF s ->
   let v := acc s in
