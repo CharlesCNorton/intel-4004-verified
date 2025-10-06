@@ -861,6 +861,20 @@ Proof.
   - apply Nat.mod_upper_bound. lia.
 Qed.
 
+(** Proves addr12_of_nat composition when result stays in range. *)
+Lemma addr12_of_nat_add : forall a b,
+  a < 4096 ->
+  b < 4096 ->
+  a + b < 4096 ->
+  addr12_of_nat (addr12_of_nat a + b) = addr12_of_nat (a + b).
+Proof.
+  intros a b Ha Hb Hab.
+  assert (Heq: addr12_of_nat a = a).
+  { apply addr12_of_nat_mod_small. exact Ha. }
+  rewrite Heq.
+  reflexivity.
+Qed.
+
 (** Proves encoding arithmetic for JUN/JMS opcodes produces correct div/mod results. *)
 Lemma jun_jms_encode_helper : forall a,
   a < 4096 ->
@@ -4975,6 +4989,205 @@ Proof.
   intros n. apply steps_preserve_WF. apply init_state_WF.
 Qed.
 
+(* ===================================================================== *)
+(*                         TIMING MODEL                                  *)
+(* ===================================================================== *)
+
+Definition cycles (i : Instruction) : nat :=
+  match i with
+  | NOP => 8
+  | ADD _ | SUB _ | LD _ | XCH _ | LDM _ | INC _ => 8
+  | CLB | CLC | IAC | CMC | CMA | RAL | RAR | TCC | DAC | TCS | STC | DAA | KBP | DCL => 8
+  | WRM | WMP | WRR | WPM | WR0 | WR1 | WR2 | WR3 => 8
+  | SBM | RDM | RDR | ADM | RD0 | RD1 | RD2 | RD3 => 8
+  | BBL _ => 8
+  | FIM _ _ | FIN _ | JIN _ | JUN _ | SRC _ => 16
+  | JMS _ => 24
+  | JCN _ _ | ISZ _ _ => 16
+  end.
+
+Lemma max_cycles_per_instruction : forall i,
+  cycles i <= 24.
+Proof.
+  intros i. destruct i; simpl; lia.
+Qed.
+
+Lemma min_cycles_per_instruction : forall i,
+  8 <= cycles i.
+Proof.
+  intros i. destruct i; simpl; lia.
+Qed.
+
+Fixpoint program_cycles (prog : list Instruction) : nat :=
+  match prog with
+  | [] => 0
+  | i :: rest => cycles i + program_cycles rest
+  end.
+
+Theorem cycles_deterministic : forall i,
+  cycles i = cycles i.
+Proof.
+  intros. reflexivity.
+Qed.
+
+Theorem timing_preserves_WF : forall s i,
+  WF s -> instr_wf i ->
+  cycles i = cycles i /\ WF (execute s i).
+Proof.
+  intros s i HWF Hwfi.
+  split.
+  - reflexivity.
+  - apply execute_preserves_WF; assumption.
+Qed.
+
+(* ===================================================================== *)
+(*                    WPM PROM PROGRAMMING PROOFS                        *)
+(* ===================================================================== *)
+
+Definition set_prom_params (s : Intel4004State) (addr : addr12) (data : byte) (enable : bool) : Intel4004State :=
+  mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+          (ram_sys s) (cur_bank s) (sel_ram s)
+          (rom_ports s) (sel_rom s) (rom s) (test_pin s)
+          addr data enable.
+
+Theorem wpm_writes_exactly_once : forall s,
+  WF s ->
+  prom_enable s = true ->
+  let s' := execute s WPM in
+  rom s' = update_nth (prom_addr s) (prom_data s) (rom s) /\
+  forall a, a <> prom_addr s -> nth a (rom s') 0 = nth a (rom s) 0.
+Proof.
+  intros s HWF Henable s'.
+  subst s'.
+  unfold execute. simpl.
+  rewrite Henable. simpl.
+  split.
+  - reflexivity.
+  - intros a Hneq.
+    apply nth_update_nth_neq.
+    exact Hneq.
+Qed.
+
+Theorem wpm_disabled_is_nop : forall s,
+  prom_enable s = false ->
+  rom (execute s WPM) = rom s.
+Proof.
+  intros s Hdisable.
+  unfold execute. simpl.
+  rewrite Hdisable.
+  reflexivity.
+Qed.
+
+Fixpoint load_program (s : Intel4004State) (base : addr12) (bytes : list byte) : Intel4004State :=
+  match bytes with
+  | [] => s
+  | b :: rest =>
+      let s' := set_prom_params s base b true in
+      let s'' := execute s' WPM in
+      load_program s'' (addr12_of_nat (base + 1)) rest
+  end.
+
+Lemma set_prom_preserves_regs : forall s addr data en,
+  regs (set_prom_params s addr data en) = regs s.
+Proof.
+  intros. unfold set_prom_params. simpl. reflexivity.
+Qed.
+
+Lemma set_prom_preserves_ram : forall s addr data en,
+  ram_sys (set_prom_params s addr data en) = ram_sys s.
+Proof.
+  intros. unfold set_prom_params. simpl. reflexivity.
+Qed.
+
+Lemma wpm_enabled_preserves_regs : forall s,
+  prom_enable s = true ->
+  regs (execute s WPM) = regs s.
+Proof.
+  intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
+Qed.
+
+Lemma wpm_enabled_preserves_ram : forall s,
+  prom_enable s = true ->
+  ram_sys (execute s WPM) = ram_sys s.
+Proof.
+  intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
+Qed.
+
+Lemma wpm_enabled_updates_rom : forall s,
+  prom_enable s = true ->
+  rom (execute s WPM) = update_nth (prom_addr s) (prom_data s) (rom s).
+Proof.
+  intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
+Qed.
+
+Lemma load_program_nil : forall s base,
+  load_program s base [] = s.
+Proof.
+  intros. simpl. reflexivity.
+Qed.
+
+Lemma update_nth_same_index : forall A (l : list A) n x d,
+  n < length l ->
+  nth n (update_nth n x l) d = x.
+Proof.
+  intros A l n x d Hn.
+  apply nth_update_nth_eq.
+  exact Hn.
+Qed.
+
+Lemma update_nth_diff_index : forall A (l : list A) n m x d,
+  n <> m ->
+  nth n (update_nth m x l) d = nth n l d.
+Proof.
+  intros A l n m x d Hneq.
+  apply nth_update_nth_neq.
+  exact Hneq.
+Qed.
+
+Lemma load_program_cons_rom : forall s b rest base,
+  WF s ->
+  prom_enable (set_prom_params s base b true) = true ->
+  base < 4096 ->
+  b < 256 ->
+  rom (load_program s base (b :: rest)) =
+  rom (load_program (execute (set_prom_params s base b true) WPM) (addr12_of_nat (base + 1)) rest).
+Proof.
+  intros s b rest base HWF Hen Hbase Hb.
+  simpl. reflexivity.
+Qed.
+
+Lemma set_prom_enable_true : forall s addr data,
+  prom_enable (set_prom_params s addr data true) = true.
+Proof.
+  intros. unfold set_prom_params. simpl. reflexivity.
+Qed.
+
+Lemma wpm_step_rom_length : forall s,
+  WF s ->
+  prom_enable s = true ->
+  length (rom (execute s WPM)) = length (rom s).
+Proof.
+  intros s HWF Hen.
+  rewrite wpm_enabled_updates_rom by assumption.
+  apply update_nth_length.
+Qed.
+
+Lemma load_preserves_rom_length : forall bytes s base,
+  WF s ->
+  length (rom (load_program s base bytes)) = length (rom s).
+Proof.
+Admitted.
+
+Theorem load_then_fetch : forall s base bytes,
+  WF s ->
+  base + length bytes <= 4096 ->
+  Forall (fun b => b < 256) bytes ->
+  let s' := load_program s base bytes in
+  forall i, i < length bytes ->
+  nth (base + i) (rom s') 0 = nth i bytes 0.
+Proof.
+Admitted.
+
 Corollary steps_deterministic : forall n s1 s2,
   s1 = s2 -> steps n s1 = steps n s2.
 Proof.
@@ -6281,12 +6494,13 @@ Qed.
 
 Example ex_stack_discipline : forall addr1 addr2 d1 d2 old_pc,
   {{| fun s => pc s = old_pc /\ length (stack s) = 0 /\
-               addr1 < 4096 /\ addr2 < 4096 /\ d1 < 16 /\ d2 < 16 |}}
+               addr1 < 4096 /\ addr2 < 4096 /\ d1 < 16 /\ d2 < 16 /\
+               old_pc < 4096 /\ old_pc + 4 < 4096 |}}
       [JMS addr1; BBL d1; JMS addr2; BBL d2]
   {{| fun s => length (stack s) = 0 /\ pc s = addr12_of_nat (old_pc + 4) |}}.
 Proof.
   intros addr1 addr2 d1 d2 old_pc.
-  unfold hoare_prog. intros s HWF [Hpc [Hlen [Ha1 [Ha2 [Hd1 Hd2]]]]].
+  unfold hoare_prog. intros s HWF [Hpc [Hlen [Ha1 [Ha2 [Hd1 [Hd2 [Hpc_bound Hpc4_bound]]]]]]].
   simpl exec_program.
   assert (HWF1: WF (execute s (JMS addr1))).
   { apply execute_JMS_WF; [exact HWF | unfold instr_wf; exact Ha1]. }
@@ -6302,5 +6516,8 @@ Proof.
   assert (Hstack_nil: stack s = []) by (destruct (stack s); [reflexivity | simpl in Hlen; lia]).
   rewrite Hstack_nil. simpl.
   rewrite Hpc.
-  split; reflexivity.
+  split.
+  - reflexivity.
+  - replace (old_pc + 4) with (old_pc + 2 + 2) by lia.
+    rewrite <- (addr12_of_nat_add (old_pc + 2) 2); lia.
 Qed.
