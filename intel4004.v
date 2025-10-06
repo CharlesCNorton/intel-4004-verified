@@ -5681,7 +5681,19 @@ Lemma hoare_XCH : forall r,
      XCH r
   {{ fun s => acc s < 16 /\ get_reg s r < 16 }}.
 Proof.
-Admitted.
+  intros r. unfold hoare_triple. intros s HWF Hr.
+  assert (HWF': WF s) by assumption.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  assert (Hwfi: instr_wf (XCH r)) by (unfold instr_wf; lia).
+  split; [apply execute_XCH_WF; auto|].
+  unfold execute. simpl.
+  assert (Hreg_bound: get_reg s r < 16).
+  { unfold get_reg. apply (nth_Forall_lt _ 0 r 16 HforR). lia. }
+  split; [exact Hreg_bound|].
+  unfold get_reg, set_reg. simpl. rewrite nth_update_nth_eq by assumption.
+  unfold nibble_of_nat. rewrite Nat.mod_small by assumption. exact Hacc.
+Qed.
 
 (* ==================== Control Flow =============================== *)
 
@@ -5697,21 +5709,32 @@ Lemma hoare_JUN : forall addr,
      JUN addr
   {{ fun s => pc s = addr }}.
 Proof.
-Admitted.
+  intros addr. unfold hoare_triple. intros s HWF Haddr.
+  split; [apply execute_JUN_WF; auto; unfold instr_wf; exact Haddr|apply pc_shape_jun].
+Qed.
 
 Lemma hoare_JMS : forall addr,
   {{ fun s => addr < 4096 /\ length (stack s) <= 3 }}
      JMS addr
   {{ fun s => pc s = addr /\ length (stack s) <= 3 }}.
 Proof.
-Admitted.
+  intros addr. unfold hoare_triple. intros s HWF [Haddr Hstack].
+  split; [apply execute_JMS_WF; auto; unfold instr_wf; exact Haddr|].
+  unfold execute. simpl. split; [apply (pc_shape_jms s addr)|apply push_stack_len_le3].
+Qed.
 
 Lemma hoare_BBL : forall d,
   {{ fun s => d < 16 }}
      BBL d
   {{ fun s => acc s = nibble_of_nat d /\ length (stack s) <= 3 }}.
 Proof.
-Admitted.
+  intros d. unfold hoare_triple. intros s HWF Hd.
+  assert (HWF': WF s) by assumption.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  split; [apply execute_BBL_WF; auto; unfold instr_wf; exact Hd|].
+  unfold execute. destruct (pop_stack s) as [[addr|] s'] eqn:Epop; simpl; (split; [reflexivity|eapply pop_stack_len_le3; eauto; lia]).
+Qed.
 
 (* ==================== RAM/ROM Operations ========================= *)
 
@@ -5720,35 +5743,55 @@ Lemma hoare_RDM :
      RDM
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF _.
+  split; [apply execute_RDM_WF; auto|].
+  unfold execute. simpl. apply ram_read_main_bound. exact HWF.
+Qed.
 
 Lemma hoare_WRM :
   {{ fun s => acc s < 16 }}
      WRM
   {{ fun _ => True }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split; [apply execute_WRM_WF; auto|auto].
+Qed.
 
 Lemma hoare_ADM :
   {{ fun s => acc s < 16 }}
      ADM
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split; [apply execute_ADM_WF; auto|].
+  assert (HWF' := execute_ADM_WF s HWF).
+  destruct HWF' as [_ [_ [Hacc' _]]].
+  exact Hacc'.
+Qed.
 
 Lemma hoare_SBM :
   {{ fun s => acc s < 16 }}
      SBM
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split; [apply execute_SBM_WF; auto|].
+  assert (HWF' := execute_SBM_WF s HWF).
+  destruct HWF' as [_ [_ [Hacc' _]]].
+  exact Hacc'.
+Qed.
 
 Lemma hoare_DCL :
   {{ fun _ => True }}
      DCL
   {{ fun s => cur_bank s < NBANKS }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF _.
+  split; [apply execute_DCL_WF; auto|].
+  assert (HWF' := execute_DCL_WF s HWF).
+  destruct HWF' as [_ [_ [_ [_ [_ [_ [_ [_ [Hbank _]]]]]]]]].
+  exact Hbank.
+Qed.
 
 (* ==================== Program-Level Hoare Logic ================== *)
 
@@ -5838,7 +5881,12 @@ Example ex_load_5 :
       [LDM 5]
   {{| fun s => acc s = 5 |}}.
 Proof.
-Admitted.
+  apply hoare_single.
+  apply hoare_consequence with (P := fun _ => 5 < 16) (Q := fun s => acc s = nibble_of_nat 5).
+  - intros s _. lia.
+  - apply hoare_LDM.
+  - intros s H. unfold nibble_of_nat in H. rewrite Nat.mod_small in H by lia. exact H.
+Qed.
 
 Example ex_clear :
   {{| fun _ => True |}}
@@ -5853,4 +5901,12 @@ Example ex_ldm_iac :
       [LDM 5; IAC]
   {{| fun s => acc s = 6 |}}.
 Proof.
-Admitted.
+  unfold hoare_prog. intros s HWF _.
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LDM 5))).
+  { apply execute_LDM_WF; auto. unfold instr_wf. lia. }
+  assert (HWF2: WF (execute (execute s (LDM 5)) IAC)).
+  { apply execute_IAC_WF; auto. }
+  split; [exact HWF2|].
+  simpl. reflexivity.
+Qed.
