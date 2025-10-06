@@ -5354,6 +5354,18 @@ Proof.
   exact H.
 Qed.
 
+Corollary instr_encodes_to_two_bytes : forall i,
+  instr_wf i ->
+  exists b1 b2, encode i = (b1, b2) /\ b1 < 256 /\ b2 < 256.
+Proof.
+  intros i Hwf.
+  destruct (encode i) as [b1 b2] eqn:E.
+  exists b1, b2.
+  assert (H := encode_range i Hwf).
+  rewrite E in H. simpl in H.
+  split; [reflexivity | exact H].
+Qed.
+
 
 (* ===================================================================== *)
 (*                         HOARE LOGIC LAYER                             *)
