@@ -5366,6 +5366,36 @@ Proof.
   split; [reflexivity | exact H].
 Qed.
 
+Fixpoint encode_list (prog : list Instruction) : list byte :=
+  match prog with
+  | [] => []
+  | i :: rest => let '(b1, b2) := encode i in
+                 b1 :: b2 :: encode_list rest
+  end.
+
+Fixpoint decode_list (bytes : list byte) : list Instruction :=
+  match bytes with
+  | [] => []
+  | b1 :: b2 :: rest => decode b1 b2 :: decode_list rest
+  | _ => []
+  end.
+
+Corollary encode_decode_list_id : forall prog,
+  Forall instr_wf prog ->
+  decode_list (encode_list prog) = prog.
+Proof.
+  induction prog as [|i rest IH]; intros Hall.
+  - simpl. reflexivity.
+  - simpl. inversion Hall; subst.
+    destruct (encode i) as [b1 b2] eqn:E.
+    simpl.
+    assert (Hdec: decode b1 b2 = i).
+    { pose proof (decode_encode_id i H1) as H.
+      rewrite E in H. simpl in H. exact H. }
+    rewrite Hdec.
+    rewrite IH; auto.
+Qed.
+
 
 (* ===================================================================== *)
 (*                         HOARE LOGIC LAYER                             *)
