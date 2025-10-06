@@ -5485,21 +5485,33 @@ Lemma hoare_LD : forall r old_r,
      LD r
   {{ fun s => acc s = old_r }}.
 Proof.
-Admitted.
+  intros r old_r. unfold hoare_triple. intros s HWF [Hold Hr].
+  split.
+  - apply execute_LD_WF. exact HWF. unfold instr_wf. exact Hr.
+  - unfold execute. simpl. exact Hold.
+Qed.
 
 Lemma hoare_CLB :
   {{ fun _ => True }}
      CLB
   {{ fun s => acc s = 0 /\ carry s = false }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF _.
+  split.
+  - apply execute_CLB_WF. exact HWF.
+  - unfold execute. simpl. split; reflexivity.
+Qed.
 
 Lemma hoare_CLC : forall old_acc,
   {{ fun s => acc s = old_acc }}
      CLC
   {{ fun s => acc s = old_acc /\ carry s = false }}.
 Proof.
-Admitted.
+  intros old_acc. unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_CLC_WF. exact HWF.
+  - unfold execute. simpl. split; [exact Hacc | reflexivity].
+Qed.
 
 
 Lemma hoare_STC : forall old_acc,
@@ -5507,70 +5519,110 @@ Lemma hoare_STC : forall old_acc,
      STC
   {{ fun s => acc s = old_acc /\ carry s = true }}.
 Proof.
-Admitted.
+  intros old_acc. unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_STC_WF. exact HWF.
+  - unfold execute. simpl. split; [exact Hacc | reflexivity].
+Qed.
 
 Lemma hoare_CMC : forall old_acc old_carry,
   {{ fun s => acc s = old_acc /\ carry s = old_carry }}
      CMC
   {{ fun s => acc s = old_acc /\ carry s = negb old_carry }}.
 Proof.
-Admitted.
+  intros old_acc old_carry. unfold hoare_triple. intros s HWF [Hacc Hcarry].
+  split.
+  - apply execute_CMC_WF. exact HWF.
+  - unfold execute. simpl. split; [exact Hacc | rewrite Hcarry; reflexivity].
+Qed.
 
 Lemma hoare_CMA :
   {{ fun s => acc s < 16 }}
      CMA
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_CMA_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_IAC :
   {{ fun s => acc s < 16 }}
      IAC
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_IAC_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_DAC :
   {{ fun s => acc s < 16 }}
      DAC
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_DAC_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_RAL :
   {{ fun s => acc s < 16 }}
      RAL
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_RAL_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_RAR :
   {{ fun s => acc s < 16 }}
      RAR
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_RAR_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_TCC :
   {{ fun _ => True }}
      TCC
   {{ fun s => acc s < 16 /\ carry s = false }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF _.
+  split.
+  - apply execute_TCC_WF. exact HWF.
+  - unfold execute. simpl. split; [destruct (carry s); lia | reflexivity].
+Qed.
 
 Lemma hoare_TCS :
   {{ fun _ => True }}
      TCS
   {{ fun s => acc s < 16 /\ carry s = false }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF _.
+  split.
+  - apply execute_TCS_WF. exact HWF.
+  - unfold execute. simpl. split; [destruct (carry s); lia | reflexivity].
+Qed.
 
 Lemma hoare_DAA :
   {{ fun s => acc s < 16 }}
      DAA
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_DAA_WF. exact HWF.
+  - unfold execute. simpl. apply nibble_lt16.
+Qed.
 
 Lemma hoare_KBP :
   {{ fun s => acc s < 16 }}
