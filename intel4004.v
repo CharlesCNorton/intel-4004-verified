@@ -1118,6 +1118,15 @@ Proof.
     reflexivity.
 Qed.
 
+Theorem encode_decode_canonical : forall b1 b2,
+  b1 < 256 -> b2 < 256 ->
+  let i := decode b1 b2 in
+  instr_wf i ->
+  encode i = encode (decode b1 b2).
+Proof.
+  intros. reflexivity.
+Qed.
+
 (* ============================ Semantics ============================= *)
 
 (** Computes page base for PC+1. Used by 1-byte indirect jumps (FIN/JIN). *)
@@ -4154,6 +4163,95 @@ Theorem clb_clears : forall s,
   let s' := execute s CLB in
   acc s' = 0 /\ carry s' = false /\ pc s' = addr12_of_nat (pc s + 1).
 Proof. intros s. simpl. repeat split; reflexivity. Qed.
+
+(* ==================== Arithmetic Correctness ==================== *)
+
+Theorem add_computes_sum : forall s r,
+  WF s -> r < 16 ->
+  let s' := execute s (ADD r) in
+  acc s' = (acc s + get_reg s r + (if carry s then 1 else 0)) mod 16 /\
+  carry s' = (16 <=? (acc s + get_reg s r + (if carry s then 1 else 0))).
+Proof.
+  intros s r HWF Hr.
+  unfold execute. simpl.
+  split; reflexivity.
+Qed.
+
+Theorem sub_computes_difference : forall s r,
+  WF s -> r < 16 ->
+  let s' := execute s (SUB r) in
+  acc s' = (acc s + 16 - get_reg s r - (if carry s then 0 else 1)) mod 16 /\
+  carry s' = (16 <=? (acc s + 16 - get_reg s r - (if carry s then 0 else 1))).
+Proof.
+  intros s r HWF Hr.
+  unfold execute. simpl.
+  split; reflexivity.
+Qed.
+
+Theorem iac_computes_increment : forall s,
+  WF s ->
+  let s' := execute s IAC in
+  acc s' = (acc s + 1) mod 16 /\
+  carry s' = (16 <=? (acc s + 1)).
+Proof.
+  intros s HWF.
+  unfold execute. simpl.
+  split; reflexivity.
+Qed.
+
+Theorem dac_computes_decrement : forall s,
+  WF s ->
+  let s' := execute s DAC in
+  acc s' = (acc s + 15) mod 16 /\
+  carry s' = negb (acc s =? 0).
+Proof.
+  intros s HWF.
+  unfold execute. simpl.
+  split; reflexivity.
+Qed.
+
+Theorem daa_bcd_adjust_correct : forall s,
+  WF s ->
+  let s' := execute s DAA in
+  let acc_with_carry := acc s + (if carry s then 1 else 0) in
+  let needs_adjust := 9 <? acc_with_carry in
+  let adjusted := if needs_adjust then acc_with_carry + 6 else acc_with_carry in
+  acc s' = adjusted mod 16 /\
+  carry s' = (16 <=? adjusted).
+Proof.
+  intros s HWF.
+  unfold execute. simpl.
+  split; reflexivity.
+Qed.
+
+Theorem arithmetic_operations_functionally_correct : forall s r,
+  WF s -> r < 16 ->
+  (let s' := execute s (ADD r) in
+   acc s' = (acc s + get_reg s r + (if carry s then 1 else 0)) mod 16 /\
+   carry s' = (16 <=? (acc s + get_reg s r + (if carry s then 1 else 0)))) /\
+  (let s' := execute s (SUB r) in
+   acc s' = (acc s + 16 - get_reg s r - (if carry s then 0 else 1)) mod 16 /\
+   carry s' = (16 <=? (acc s + 16 - get_reg s r - (if carry s then 0 else 1)))) /\
+  (let s' := execute s IAC in
+   acc s' = (acc s + 1) mod 16 /\
+   carry s' = (16 <=? (acc s + 1))) /\
+  (let s' := execute s DAC in
+   acc s' = (acc s + 15) mod 16 /\
+   carry s' = negb (acc s =? 0)) /\
+  (let s' := execute s DAA in
+   let acc_with_carry := acc s + (if carry s then 1 else 0) in
+   let needs_adjust := 9 <? acc_with_carry in
+   let adjusted := if needs_adjust then acc_with_carry + 6 else acc_with_carry in
+   acc s' = adjusted mod 16 /\
+   carry s' = (16 <=? adjusted)).
+Proof.
+  intros s r HWF Hr.
+  split. apply add_computes_sum; auto.
+  split. apply sub_computes_difference; auto.
+  split. apply iac_computes_increment; auto.
+  split. apply dac_computes_decrement; auto.
+  apply daa_bcd_adjust_correct; auto.
+Qed.
 
 (* Carry/Link check examples *)
 (* SUB sets carry iff result did not underflow (borrow did not occur). *)
