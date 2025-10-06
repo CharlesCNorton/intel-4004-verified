@@ -1,4 +1,4 @@
-(* ===================================================================== *)
+                (* ===================================================================== *)
 (*  Intel 4004 Microprocessor + MCS-4 RAM/ROM I/O Formalization in Coq   *)
 (* ===================================================================== *)
 
@@ -4553,6 +4553,34 @@ Proof.
   - destruct (pop_stack s) as [[?|] ?]; reflexivity.
 Qed.
 
+Definition writes_acc (i:Instruction) : bool :=
+  match i with
+  | LDM _ | LD _ | ADD _ | SUB _ | INC _ | XCH _ | BBL _
+  | RDM | RDR | ADM | RD0 | RD1 | RD2 | RD3
+  | CLB | CMA | IAC | DAC | RAL | RAR | TCC | TCS | DAA | KBP => true
+  | _ => false
+  end.
+
+Lemma execute_acc_frame : forall s i,
+  writes_acc i = false ->
+  acc (execute s i) = acc s.
+Proof.
+  intros s i H.
+  destruct i; simpl in H; try discriminate; unfold execute; fold execute;
+  try reflexivity.
+  - set (c1 := n / 8).
+    set (c2 := (n / 4) mod 2).
+    set (c3 := (n / 2) mod 2).
+    set (c4 := n mod 2).
+    set (base_cond := orb (andb (acc s =? 0) (c2 =? 1)) (orb (andb (carry s) (c3 =? 1)) (andb (negb (test_pin s)) (c4 =? 1)))).
+    set (jump := if c1 =? 1 then negb base_cond else base_cond).
+    destruct jump; reflexivity.
+  - unfold push_stack. destruct (stack s) as [|s1 [|s2 [|s3 rest]]]; reflexivity.
+  - set (new_val := nibble_of_nat (get_reg s n + 1)).
+    destruct (new_val =? 0); reflexivity.
+  - destruct (pop_stack s) as [[?|] ?]; reflexivity.
+Qed.
+
 (* --- KBP mapping & TEST note --- *)
 
 (* KBP encodes single-bit positions (0,1,2,4,8) to indices (0,1,2,3,4), else 15. *)
@@ -4693,4 +4721,960 @@ Proof.
   rewrite Heq. rewrite Hs1_acc.
   unfold nibble_of_nat. rewrite Nat.mod_small by lia. reflexivity.
 Qed.
-    
+
+Corollary src_wrr_rom_port_roundtrip : forall s r,
+  WF s ->
+  let v := acc s in
+  let s1 := execute s (SRC r) in
+  let s2 := execute s1 WRR in
+  nth (sel_rom s1) (rom_ports s2) 0 = v.
+Proof.
+  intros s r Hwf v s1 s2.
+  subst v s1 s2.
+  unfold execute at 1. fold execute.
+  simpl sel_rom.
+  apply src_wrr_updates_rom_port.
+  exact Hwf.
+Qed.
+
+Lemma jms_bbl_roundtrip : forall s addr data,
+  WF s ->
+  length (stack s) <= 2 ->
+  addr < 4096 ->
+  let s1 := execute s (JMS addr) in
+  let s2 := execute s1 (BBL data) in
+  pc s2 = addr12_of_nat (pc s + 2).
+Proof.
+  intros s addr data Hwf Hstack Haddr s1 s2.
+  subst s1 s2.
+  unfold execute at 2. fold execute.
+  unfold execute at 1. fold execute.
+  set (ret_addr := addr12_of_nat (pc s + 2)).
+  set (s_pushed := push_stack s ret_addr).
+  unfold s_pushed, push_stack.
+  destruct (stack s) as [|a [|b [|c rest]]] eqn:Estack.
+  - simpl. unfold pop_stack. simpl. reflexivity.
+  - simpl. unfold pop_stack. simpl. reflexivity.
+  - simpl. unfold pop_stack. simpl. reflexivity.
+  - simpl in Hstack. lia.
+Qed.
+
+Corollary steps_from_init_WF : forall n, WF (steps n init_state).
+Proof.
+  intros n. apply steps_preserve_WF. apply init_state_WF.
+Qed.
+
+Corollary steps_deterministic : forall n s1 s2,
+  s1 = s2 -> steps n s1 = steps n s2.
+Proof.
+  intros n s1 s2 Heq. rewrite Heq. reflexivity.
+Qed.
+
+(* ==================== Fetch increment equalities ==================== *)
+
+Lemma pc_inc1_unfold : forall s,
+  pc_inc1 s = addr12_of_nat (pc s + 1).
+Proof.
+  intros s. unfold pc_inc1. reflexivity.
+Qed.
+
+Lemma pc_inc2_unfold : forall s,
+  pc_inc2 s = addr12_of_nat (pc s + 2).
+Proof.
+  intros s. unfold pc_inc2. reflexivity.
+Qed.
+
+(* ==================== update_nth out-of-bounds ==================== *)
+
+Lemma update_nth_out_of_bounds : forall A (l : list A) n x,
+  n >= length l -> update_nth n x l = l.
+Proof.
+  intros A l n x Hn.
+  unfold update_nth.
+  assert (n <? length l = false).
+  { apply Nat.ltb_ge. exact Hn. }
+  rewrite H. reflexivity.
+Qed.
+
+(* ==================== Register round-trips ==================== *)
+
+Lemma get_reg_set_reg_same : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  get_reg (set_reg s r v) r = nibble_of_nat v.
+Proof.
+  intros s r v Hlen Hr.
+  unfold get_reg, set_reg. simpl.
+  apply nth_update_nth_eq. rewrite Hlen. assumption.
+Qed.
+
+(* ==================== Encode range (bytes < 256) ==================== *)
+
+(* Helper lemma for arithmetic bounds *)
+Lemma add_bound_32_256 : forall n, n < 16 -> 16 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (16 + n <= 16 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (16 + 15 = 31) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=31); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_48_256 : forall n, n < 16 -> 32 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (32 + n <= 32 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (32 + 15 = 47) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=47); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_64_256 : forall n, n < 16 -> 48 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (48 + n <= 48 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (48 + 15 = 63) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=63); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_80_256 : forall n, n < 16 -> 64 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (64 + n <= 64 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (64 + 15 = 79) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=79); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_96_256 : forall n, n < 16 -> 80 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (80 + n <= 80 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (80 + 15 = 95) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=95); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_112_256 : forall n, n < 16 -> 96 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (96 + n <= 96 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (96 + 15 = 111) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=111); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_128_256 : forall n, n < 16 -> 112 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (112 + n <= 112 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (112 + 15 = 127) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=127); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_144_256 : forall n, n < 16 -> 128 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (128 + n <= 128 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (128 + 15 = 143) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=143); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_160_256 : forall n, n < 16 -> 144 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (144 + n <= 144 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (144 + 15 = 159) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=159); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_176_256 : forall n, n < 16 -> 160 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (160 + n <= 160 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (160 + 15 = 175) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=175); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_192_256 : forall n, n < 16 -> 176 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (176 + n <= 176 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (176 + 15 = 191) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=191); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_208_256 : forall n, n < 16 -> 192 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (192 + n <= 192 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (192 + 15 = 207) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=207); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma add_bound_224_256 : forall n, n < 16 -> 208 + n < 256.
+Proof.
+  intros n Hn.
+  assert (n <= 15).
+  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
+  assert (208 + n <= 208 + 15).
+  { apply Nat.add_le_mono_l. exact H. }
+  assert (208 + 15 = 223) by reflexivity.
+  rewrite H1 in H0.
+  apply Nat.le_lt_trans with (m:=223); [exact H0 | unfold lt; repeat constructor].
+Qed.
+
+Lemma encode_NOP_range : fst (encode NOP) < 256 /\ snd (encode NOP) < 256.
+Proof.
+  unfold encode, fst, snd. split; unfold lt; repeat constructor.
+Qed.
+
+Lemma encode_JCN_range : forall n b,
+  instr_wf (JCN n b) ->
+  fst (encode (JCN n b)) < 256 /\ snd (encode (JCN n b)) < 256.
+Proof.
+  intros n b Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn Hb].
+  unfold encode, fst, snd.
+  split.
+  - apply add_bound_32_256. exact Hn.
+  - assert (b = b mod 256).
+    { symmetry. apply Nat.mod_small. exact Hb. }
+    rewrite <- H. exact Hb.
+Qed.
+
+Lemma encode_FIM_range : forall n b,
+  instr_wf (FIM n b) ->
+  fst (encode (FIM n b)) < 256 /\ snd (encode (FIM n b)) < 256.
+Proof.
+  intros n b Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn [Heven Hb]].
+  unfold encode, fst, snd.
+  split.
+  - assert ((n - n mod 2) mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_48_256. exact H.
+  - assert (b = b mod 256).
+    { symmetry. apply Nat.mod_small. exact Hb. }
+    rewrite <- H. exact Hb.
+Qed.
+
+Lemma encode_SRC_range : forall n,
+  instr_wf (SRC n) ->
+  fst (encode (SRC n)) < 256 /\ snd (encode (SRC n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn Hodd].
+  unfold encode, fst, snd.
+  split.
+  - assert (((n - n mod 2 + 1) mod 16) < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_48_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_FIN_range : forall n,
+  instr_wf (FIN n) ->
+  fst (encode (FIN n)) < 256 /\ snd (encode (FIN n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn Heven].
+  unfold encode, fst, snd.
+  split.
+  - assert ((n - n mod 2) mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_64_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_JIN_range : forall n,
+  instr_wf (JIN n) ->
+  fst (encode (JIN n)) < 256 /\ snd (encode (JIN n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn Hodd].
+  unfold encode, fst, snd.
+  split.
+  - assert (((n - n mod 2 + 1) mod 16) < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_64_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_JUN_range : forall a,
+  instr_wf (JUN a) ->
+  fst (encode (JUN a)) < 256 /\ snd (encode (JUN a)) < 256.
+Proof.
+  intros a Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert ((a / 256) mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_80_256. exact H.
+  - assert (a mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
+    exact H.
+Qed.
+
+Lemma encode_JMS_range : forall a,
+  instr_wf (JMS a) ->
+  fst (encode (JMS a)) < 256 /\ snd (encode (JMS a)) < 256.
+Proof.
+  intros a Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert ((a / 256) mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_96_256. exact H.
+  - assert (a mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
+    exact H.
+Qed.
+
+Lemma encode_INC_range : forall n,
+  instr_wf (INC n) ->
+  fst (encode (INC n)) < 256 /\ snd (encode (INC n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_112_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_ISZ_range : forall n b,
+  instr_wf (ISZ n b) ->
+  fst (encode (ISZ n b)) < 256 /\ snd (encode (ISZ n b)) < 256.
+Proof.
+  intros n b Hwf. unfold instr_wf in Hwf. destruct Hwf as [Hn Hb].
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_128_256. exact H.
+  - assert (b = b mod 256).
+    { symmetry. apply Nat.mod_small. exact Hb. }
+    rewrite <- H. exact Hb.
+Qed.
+
+Lemma encode_ADD_range : forall n,
+  instr_wf (ADD n) ->
+  fst (encode (ADD n)) < 256 /\ snd (encode (ADD n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_144_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_SUB_range : forall n,
+  instr_wf (SUB n) ->
+  fst (encode (SUB n)) < 256 /\ snd (encode (SUB n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_160_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_LD_range : forall n,
+  instr_wf (LD n) ->
+  fst (encode (LD n)) < 256 /\ snd (encode (LD n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_176_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_XCH_range : forall n,
+  instr_wf (XCH n) ->
+  fst (encode (XCH n)) < 256 /\ snd (encode (XCH n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_192_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_BBL_range : forall n,
+  instr_wf (BBL n) ->
+  fst (encode (BBL n)) < 256 /\ snd (encode (BBL n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_208_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_LDM_range : forall n,
+  instr_wf (LDM n) ->
+  fst (encode (LDM n)) < 256 /\ snd (encode (LDM n)) < 256.
+Proof.
+  intros n Hwf. unfold instr_wf in Hwf.
+  unfold encode, fst, snd.
+  split.
+  - assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    apply add_bound_224_256. exact H.
+  - unfold lt. repeat constructor.
+Qed.
+
+Lemma encode_WRM_range : fst (encode WRM) < 256 /\ snd (encode WRM) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WMP_range : fst (encode WMP) < 256 /\ snd (encode WMP) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WRR_range : fst (encode WRR) < 256 /\ snd (encode WRR) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WPM_range : fst (encode WPM) < 256 /\ snd (encode WPM) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WR0_range : fst (encode WR0) < 256 /\ snd (encode WR0) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WR1_range : fst (encode WR1) < 256 /\ snd (encode WR1) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WR2_range : fst (encode WR2) < 256 /\ snd (encode WR2) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_WR3_range : fst (encode WR3) < 256 /\ snd (encode WR3) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_SBM_range : fst (encode SBM) < 256 /\ snd (encode SBM) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RDM_range : fst (encode RDM) < 256 /\ snd (encode RDM) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RDR_range : fst (encode RDR) < 256 /\ snd (encode RDR) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_ADM_range : fst (encode ADM) < 256 /\ snd (encode ADM) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RD0_range : fst (encode RD0) < 256 /\ snd (encode RD0) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RD1_range : fst (encode RD1) < 256 /\ snd (encode RD1) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RD2_range : fst (encode RD2) < 256 /\ snd (encode RD2) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RD3_range : fst (encode RD3) < 256 /\ snd (encode RD3) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_CLB_range : fst (encode CLB) < 256 /\ snd (encode CLB) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_CLC_range : fst (encode CLC) < 256 /\ snd (encode CLC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_IAC_range : fst (encode IAC) < 256 /\ snd (encode IAC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_CMC_range : fst (encode CMC) < 256 /\ snd (encode CMC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_CMA_range : fst (encode CMA) < 256 /\ snd (encode CMA) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RAL_range : fst (encode RAL) < 256 /\ snd (encode RAL) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_RAR_range : fst (encode RAR) < 256 /\ snd (encode RAR) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_TCC_range : fst (encode TCC) < 256 /\ snd (encode TCC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_DAC_range : fst (encode DAC) < 256 /\ snd (encode DAC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_TCS_range : fst (encode TCS) < 256 /\ snd (encode TCS) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_STC_range : fst (encode STC) < 256 /\ snd (encode STC) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_DAA_range : fst (encode DAA) < 256 /\ snd (encode DAA) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_KBP_range : fst (encode KBP) < 256 /\ snd (encode KBP) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_DCL_range : fst (encode DCL) < 256 /\ snd (encode DCL) < 256.
+Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+
+Lemma encode_range : forall i,
+  instr_wf i ->
+  fst (encode i) < 256 /\ snd (encode i) < 256.
+Proof.
+  intros i Hwf.
+  destruct i.
+  - apply encode_NOP_range.
+  - apply encode_JCN_range. exact Hwf.
+  - apply encode_FIM_range. exact Hwf.
+  - apply encode_SRC_range. exact Hwf.
+  - apply encode_FIN_range. exact Hwf.
+  - apply encode_JIN_range. exact Hwf.
+  - apply encode_JUN_range. exact Hwf.
+  - apply encode_JMS_range. exact Hwf.
+  - apply encode_INC_range. exact Hwf.
+  - apply encode_ISZ_range. exact Hwf.
+  - apply encode_ADD_range. exact Hwf.
+  - apply encode_SUB_range. exact Hwf.
+  - apply encode_LD_range. exact Hwf.
+  - apply encode_XCH_range. exact Hwf.
+  - apply encode_BBL_range. exact Hwf.
+  - apply encode_LDM_range. exact Hwf.
+  - apply encode_WRM_range.
+  - apply encode_WMP_range.
+  - apply encode_WRR_range.
+  - apply encode_WPM_range.
+  - apply encode_WR0_range.
+  - apply encode_WR1_range.
+  - apply encode_WR2_range.
+  - apply encode_WR3_range.
+  - apply encode_SBM_range.
+  - apply encode_RDM_range.
+  - apply encode_RDR_range.
+  - apply encode_ADM_range.
+  - apply encode_RD0_range.
+  - apply encode_RD1_range.
+  - apply encode_RD2_range.
+  - apply encode_RD3_range.
+  - apply encode_CLB_range.
+  - apply encode_CLC_range.
+  - apply encode_IAC_range.
+  - apply encode_CMC_range.
+  - apply encode_CMA_range.
+  - apply encode_RAL_range.
+  - apply encode_RAR_range.
+  - apply encode_TCC_range.
+  - apply encode_DAC_range.
+  - apply encode_TCS_range.
+  - apply encode_STC_range.
+  - apply encode_DAA_range.
+  - apply encode_KBP_range.
+  - apply encode_DCL_range.
+Qed.
+
+
+(* ===================================================================== *)
+(*                         HOARE LOGIC LAYER                             *)
+(* ===================================================================== *)
+
+(* ==================== Hoare Triple Definition ======================= *)
+
+Definition hoare_triple (P Q : Intel4004State -> Prop) (i : Instruction) : Prop :=
+  forall s, WF s -> P s ->
+    let s' := execute s i in
+    WF s' /\ Q s'.
+
+Notation "{{ P }} i {{ Q }}" := (hoare_triple P Q i) (at level 90, i at next level).
+
+(* ==================== Structural Rules =========================== *)
+
+Lemma hoare_consequence : forall P P' Q Q' i,
+  (forall s, P' s -> P s) ->
+  {{ P }} i {{ Q }} ->
+  (forall s, Q s -> Q' s) ->
+  {{ P' }} i {{ Q' }}.
+Proof.
+  intros P P' Q Q' i Hpre Htriple Hpost.
+  unfold hoare_triple in *.
+  intros s HWF HP'.
+  specialize (Htriple s HWF (Hpre s HP')).
+  destruct Htriple as [HWF' HQ].
+  split; auto.
+Qed.
+
+Lemma hoare_conj : forall P P' Q Q' i,
+  {{ P }} i {{ Q }} ->
+  {{ P' }} i {{ Q' }} ->
+  {{ fun s => P s /\ P' s }} i {{ fun s => Q s /\ Q' s }}.
+Proof.
+  intros P P' Q Q' i H1 H2.
+  unfold hoare_triple in *.
+  intros s HWF [HP HP'].
+  specialize (H1 s HWF HP).
+  specialize (H2 s HWF HP').
+  destruct H1 as [HWF1 HQ].
+  destruct H2 as [HWF2 HQ'].
+  split; auto.
+Qed.
+
+(* ==================== Accumulator Instructions =================== *)
+
+Lemma hoare_LDM : forall n,
+  {{ fun _ => n < 16 }}
+     LDM n
+  {{ fun s => acc s = nibble_of_nat n }}.
+Proof.
+  intros n. unfold hoare_triple, execute. intros s HWF Hn.
+  split.
+  - apply execute_LDM_WF; auto; unfold instr_wf; exact Hn.
+  - simpl; reflexivity.
+Qed.
+
+Lemma hoare_LD : forall r old_r,
+  {{ fun s => get_reg s r = old_r /\ r < 16 }}
+     LD r
+  {{ fun s => acc s = old_r }}.
+Proof.
+Admitted.
+
+Lemma hoare_CLB :
+  {{ fun _ => True }}
+     CLB
+  {{ fun s => acc s = 0 /\ carry s = false }}.
+Proof.
+Admitted.
+
+Lemma hoare_CLC : forall old_acc,
+  {{ fun s => acc s = old_acc }}
+     CLC
+  {{ fun s => acc s = old_acc /\ carry s = false }}.
+Proof.
+Admitted.
+
+
+Lemma hoare_STC : forall old_acc,
+  {{ fun s => acc s = old_acc }}
+     STC
+  {{ fun s => acc s = old_acc /\ carry s = true }}.
+Proof.
+Admitted.
+
+Lemma hoare_CMC : forall old_acc old_carry,
+  {{ fun s => acc s = old_acc /\ carry s = old_carry }}
+     CMC
+  {{ fun s => acc s = old_acc /\ carry s = negb old_carry }}.
+Proof.
+Admitted.
+
+Lemma hoare_CMA :
+  {{ fun s => acc s < 16 }}
+     CMA
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_IAC :
+  {{ fun s => acc s < 16 }}
+     IAC
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_DAC :
+  {{ fun s => acc s < 16 }}
+     DAC
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_RAL :
+  {{ fun s => acc s < 16 }}
+     RAL
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_RAR :
+  {{ fun s => acc s < 16 }}
+     RAR
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_TCC :
+  {{ fun _ => True }}
+     TCC
+  {{ fun s => acc s < 16 /\ carry s = false }}.
+Proof.
+Admitted.
+
+Lemma hoare_TCS :
+  {{ fun _ => True }}
+     TCS
+  {{ fun s => acc s < 16 /\ carry s = false }}.
+Proof.
+Admitted.
+
+Lemma hoare_DAA :
+  {{ fun s => acc s < 16 }}
+     DAA
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_KBP :
+  {{ fun s => acc s < 16 }}
+     KBP
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+(* ==================== Register Instructions ====================== *)
+
+Lemma hoare_INC : forall r,
+  {{ fun s => r < length (regs s) }}
+     INC r
+  {{ fun s => get_reg s r < 16 }}.
+Proof.
+  intros r. unfold hoare_triple, execute. intros s HWF Hr.
+  split.
+  - apply execute_INC_WF; auto. unfold instr_wf.
+    destruct HWF as [HlenR _]. lia.
+  - unfold get_reg, set_reg. simpl.
+    rewrite nth_update_nth_eq by assumption.
+    apply nibble_lt16.
+Qed.
+
+Lemma hoare_ADD : forall r,
+  {{ fun s => r < length (regs s) /\ acc s < 16 /\ get_reg s r < 16 }}
+     ADD r
+  {{ fun s => acc s < 16 }}.
+Proof.
+  intros r. unfold hoare_triple, execute. intros s HWF [Hr [Hacc Hreg]].
+  split.
+  - apply execute_ADD_WF; auto. unfold instr_wf.
+    destruct HWF as [HlenR _]. lia.
+  - apply nibble_lt16.
+Qed.
+
+Lemma hoare_SUB : forall r,
+  {{ fun s => r < length (regs s) /\ acc s < 16 /\ get_reg s r < 16 }}
+     SUB r
+  {{ fun s => acc s < 16 }}.
+Proof.
+  intros r. unfold hoare_triple, execute. intros s HWF [Hr [Hacc Hreg]].
+  split.
+  - apply execute_SUB_WF; auto. unfold instr_wf.
+    destruct HWF as [HlenR _]. lia.
+  - apply nibble_lt16.
+Qed.
+
+Lemma hoare_XCH : forall r,
+  {{ fun s => r < length (regs s) }}
+     XCH r
+  {{ fun s => acc s < 16 /\ get_reg s r < 16 }}.
+Proof.
+Admitted.
+
+(* ==================== Control Flow =============================== *)
+
+Lemma hoare_NOP : forall P,
+  {{ P }}
+     NOP
+  {{ P }}.
+Proof.
+Admitted.
+
+Lemma hoare_JUN : forall addr,
+  {{ fun s => addr < 4096 }}
+     JUN addr
+  {{ fun s => pc s = addr }}.
+Proof.
+Admitted.
+
+Lemma hoare_JMS : forall addr,
+  {{ fun s => addr < 4096 /\ length (stack s) <= 3 }}
+     JMS addr
+  {{ fun s => pc s = addr /\ length (stack s) <= 3 }}.
+Proof.
+Admitted.
+
+Lemma hoare_BBL : forall d,
+  {{ fun s => d < 16 }}
+     BBL d
+  {{ fun s => acc s = nibble_of_nat d /\ length (stack s) <= 3 }}.
+Proof.
+Admitted.
+
+(* ==================== RAM/ROM Operations ========================= *)
+
+Lemma hoare_RDM :
+  {{ fun _ => True }}
+     RDM
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_WRM :
+  {{ fun s => acc s < 16 }}
+     WRM
+  {{ fun _ => True }}.
+Proof.
+Admitted.
+
+Lemma hoare_ADM :
+  {{ fun s => acc s < 16 }}
+     ADM
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_SBM :
+  {{ fun s => acc s < 16 }}
+     SBM
+  {{ fun s => acc s < 16 }}.
+Proof.
+Admitted.
+
+Lemma hoare_DCL :
+  {{ fun _ => True }}
+     DCL
+  {{ fun s => cur_bank s < NBANKS }}.
+Proof.
+Admitted.
+
+(* ==================== Program-Level Hoare Logic ================== *)
+
+Fixpoint exec_program (prog : list Instruction) (s : Intel4004State) : Intel4004State :=
+  match prog with
+  | [] => s
+  | i :: rest => exec_program rest (execute s i)
+  end.
+
+Definition hoare_prog (P Q : Intel4004State -> Prop) (prog : list Instruction) : Prop :=
+  forall s, WF s -> P s ->
+    let s' := exec_program prog s in
+    WF s' /\ Q s'.
+
+Notation "{{| P |}} prog {{| Q |}}" := (hoare_prog P Q prog) (at level 90).
+
+Lemma hoare_single : forall P Q i,
+  {{ P }} i {{ Q }} ->
+  {{| P |}} [i] {{| Q |}}.
+Proof.
+  intros P Q i H.
+  unfold hoare_prog, hoare_triple in *.
+  intros s HWF HP. simpl. apply H; auto.
+Qed.
+
+Lemma exec_program_app : forall prog1 prog2 s,
+  exec_program (prog1 ++ prog2) s = exec_program prog2 (exec_program prog1 s).
+Proof.
+  induction prog1; intros prog2 s.
+  - simpl. reflexivity.
+  - simpl. rewrite IHprog1. reflexivity.
+Qed.
+
+Lemma hoare_prog_seq : forall P Q R prog1 prog2,
+  {{| P |}} prog1 {{| Q |}} ->
+  {{| Q |}} prog2 {{| R |}} ->
+  {{| P |}} prog1 ++ prog2 {{| R |}}.
+Proof.
+  intros P Q R prog1 prog2 H1 H2.
+  unfold hoare_prog in *.
+  intros s HWF HP.
+  rewrite exec_program_app.
+  assert (Hmid := H1 s HWF HP).
+  destruct Hmid as [HWF' HQ].
+  apply H2; auto.
+Qed.
+
+Lemma hoare_prog_consequence : forall P P' Q Q' prog,
+  (forall s, P' s -> P s) ->
+  {{| P |}} prog {{| Q |}} ->
+  (forall s, Q s -> Q' s) ->
+  {{| P' |}} prog {{| Q' |}}.
+Proof.
+  intros P P' Q Q' prog Hpre Hprog Hpost.
+  unfold hoare_prog in *.
+  intros s HWF HP'.
+  specialize (Hprog s HWF (Hpre s HP')).
+  destruct Hprog as [HWF' HQ].
+  split; auto.
+Qed.
+
+Fixpoint wp (prog : list Instruction) (Q : Intel4004State -> Prop) : Intel4004State -> Prop :=
+  match prog with
+  | [] => Q
+  | i :: rest => fun s =>
+      WF s ->
+      let s' := execute s i in
+      WF s' /\ wp rest Q s'
+  end.
+
+Theorem wp_soundness : forall prog Q,
+  {{| wp prog Q |}} prog {{| Q |}}.
+Proof.
+  induction prog; intros Q.
+  - unfold hoare_prog, wp. intros s HWF HQ. simpl. split; auto.
+  - unfold hoare_prog, wp. intros s HWF Hwp.
+    specialize (Hwp HWF).
+    destruct Hwp as [HWF' Hwp'].
+    simpl. fold exec_program.
+    apply IHprog; auto.
+Qed.
+
+(* ==================== Example Verifications ====================== *)
+
+Example ex_load_5 :
+  {{| fun _ => True |}}
+      [LDM 5]
+  {{| fun s => acc s = 5 |}}.
+Proof.
+Admitted.
+
+Example ex_clear :
+  {{| fun _ => True |}}
+      [CLB]
+  {{| fun s => acc s = 0 /\ carry s = false |}}.
+Proof.
+  apply hoare_single. apply hoare_CLB.
+Qed.
+
+Example ex_ldm_iac :
+  {{| fun _ => True |}}
+      [LDM 5; IAC]
+  {{| fun s => acc s = 6 |}}.
+Proof.
+Admitted.
