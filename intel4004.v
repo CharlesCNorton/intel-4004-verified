@@ -768,14 +768,13 @@ Lemma mod_add_multiple : forall a b n,
   (n * a + b) mod n = b mod n.
 Proof.
   intros a b n Hn.
-  rewrite Nat.add_mod by exact Hn.
+  rewrite Nat.Div0.add_mod by exact Hn.
   assert (n * a mod n = 0).
   { rewrite Nat.mul_comm.
-    apply Nat.mod_mul.
-    exact Hn. }
+    apply Nat.Div0.mod_mul. }
   rewrite H.
   rewrite Nat.add_0_l.
-  rewrite Nat.mod_mod by exact Hn.
+  rewrite Nat.Div0.mod_mod by exact Hn.
   reflexivity.
 Qed.
 
@@ -2136,16 +2135,16 @@ Proof.
   { exists (n / 16). apply Nat.div_mod. lia. }
   destruct H as [k Hk].
   rewrite Hk at 2.
-  rewrite Nat.add_mod by lia.
+  rewrite Nat.Div0.add_mod by lia.
   assert (16 * k mod 2 = 0).
   { (* 16 = 0 mod 2, so 16 * k = 0 mod 2 *)
     assert (H16mod: 16 mod 2 = 0) by reflexivity.
-    rewrite <- Nat.mul_mod_idemp_l by lia.
+    rewrite <- Nat.Div0.mul_mod_idemp_l by lia.
     rewrite H16mod.
     simpl. reflexivity. }
   rewrite H.
   rewrite Nat.add_0_l.
-  rewrite Nat.mod_mod by lia.
+  rewrite Nat.Div0.mod_mod by lia.
   reflexivity.
 Qed.
 
@@ -2436,7 +2435,7 @@ Qed.
 
 Lemma b1_div_16_lt_16 : forall b1, b1 < 256 -> b1 / 16 < 16.
 Proof.
-  intros. apply Nat.div_lt_upper_bound. lia. lia.
+  intros. apply Nat.Div0.div_lt_upper_bound. lia.
 Qed.
 
 Lemma decode_instr_wf : forall b1 b2,
@@ -5364,6 +5363,33 @@ Proof.
   assert (H := encode_range i Hwf).
   rewrite E in H. simpl in H.
   split; [reflexivity | exact H].
+Qed.
+
+Corollary instr_encodes_to_exactly_two_valid_bytes : forall i,
+  instr_wf i ->
+  exists! p : byte * byte,
+    encode i = p /\
+    fst p < 256 /\ snd p < 256 /\
+    decode (fst p) (snd p) = i.
+Proof.
+  intros i Hwf.
+  destruct (encode i) as [b1 b2] eqn:Eenc.
+  exists (b1, b2).
+  split.
+  - split; [reflexivity | ].
+    simpl.
+    assert (Hrange := encode_range i Hwf).
+    rewrite Eenc in Hrange.
+    simpl in Hrange.
+    split; [apply Hrange | ].
+    split; [apply Hrange | ].
+    pose proof (decode_encode_id i Hwf) as Hdec.
+    rewrite Eenc in Hdec.
+    simpl in Hdec.
+    exact Hdec.
+  - intros [b1' b2'] [Henc' [Hfst' [Hsnd' Hdec']]].
+    simpl in Hfst', Hsnd', Hdec'.
+    congruence.
 Qed.
 
 Fixpoint encode_list (prog : list Instruction) : list byte :=
