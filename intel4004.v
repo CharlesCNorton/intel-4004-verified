@@ -1,4 +1,4 @@
-(* ===================================================================== *)
+                (* ===================================================================== *)
 (*  Intel 4004 Microprocessor + MCS-4 RAM/ROM I/O Formalization in Coq   *)
 (* ===================================================================== *)
 
@@ -4801,6 +4801,12 @@ Proof.
       rewrite Heven. simpl. reflexivity. }
   rewrite Hr_even, Hr1_even.
   reflexivity.
+Qed.
+
+Lemma r_even_bound : forall r,
+  r - r mod 2 < 16 \/ r - r mod 2 >= 16.
+Proof.
+  intro r. lia.
 Qed.
 
 (* ==================== Fetch increment equalities ==================== *)
