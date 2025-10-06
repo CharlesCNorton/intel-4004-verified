@@ -1,4 +1,4 @@
-                (* ===================================================================== *)
+(* ===================================================================== *)
 (*  Intel 4004 Microprocessor + MCS-4 RAM/ROM I/O Formalization in Coq   *)
 (* ===================================================================== *)
 
@@ -5629,7 +5629,12 @@ Lemma hoare_KBP :
      KBP
   {{ fun s => acc s < 16 }}.
 Proof.
-Admitted.
+  unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_KBP_WF. exact HWF.
+  - unfold execute. simpl.
+    destruct (acc s) as [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|[|]]]]]]]]]]]]]]]]; lia.
+Qed.
 
 (* ==================== Register Instructions ====================== *)
 
