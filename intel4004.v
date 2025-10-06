@@ -1,4 +1,4 @@
-                (* ===================================================================== *)
+(* ===================================================================== *)
 (*  Intel 4004 Microprocessor + MCS-4 RAM/ROM I/O Formalization in Coq   *)
 (* ===================================================================== *)
 
@@ -4491,6 +4491,25 @@ Proof.
   - exact Hwf.
 Qed.
 
+Definition is_jump (i:Instruction) : bool :=
+  match i with
+  | JCN _ _ | JUN _ | JMS _ | JIN _ | BBL _ | ISZ _ _ => true
+  | _ => false
+  end.
+
+Corollary pc_monotonic_non_jump : forall s i,
+  WF s ->
+  instr_wf i ->
+  is_jump i = false ->
+  pc (execute s i) = addr12_of_nat (pc s + 1) \/
+  pc (execute s i) = addr12_of_nat (pc s + 2).
+Proof.
+  intros s i HWF Hwfi Hjump.
+  destruct i; simpl in Hjump; try discriminate; unfold execute;
+  try (left; unfold pc_inc1; reflexivity);
+  try (right; unfold pc_inc2; reflexivity).
+Qed.
+
 (* --- Frames (no unintended writes) --- *)
 
 Lemma pop_stack_preserves_regs : forall s opt s',
@@ -4556,7 +4575,7 @@ Qed.
 Definition writes_acc (i:Instruction) : bool :=
   match i with
   | LDM _ | LD _ | ADD _ | SUB _ | INC _ | XCH _ | BBL _
-  | RDM | RDR | ADM | RD0 | RD1 | RD2 | RD3
+  | SBM | RDM | RDR | ADM | RD0 | RD1 | RD2 | RD3
   | CLB | CMA | IAC | DAC | RAL | RAR | TCC | TCS | DAA | KBP => true
   | _ => false
   end.
@@ -4566,8 +4585,8 @@ Lemma execute_acc_frame : forall s i,
   acc (execute s i) = acc s.
 Proof.
   intros s i H.
-  destruct i; simpl in H; try discriminate; unfold execute; fold execute;
-  try reflexivity.
+  destruct i; simpl in H; try discriminate; unfold execute; try reflexivity;
+  try (destruct (prom_enable s); reflexivity).
   - set (c1 := n / 8).
     set (c2 := (n / 4) mod 2).
     set (c3 := (n / 2) mod 2).
@@ -4575,10 +4594,8 @@ Proof.
     set (base_cond := orb (andb (acc s =? 0) (c2 =? 1)) (orb (andb (carry s) (c3 =? 1)) (andb (negb (test_pin s)) (c4 =? 1)))).
     set (jump := if c1 =? 1 then negb base_cond else base_cond).
     destruct jump; reflexivity.
-  - unfold push_stack. destruct (stack s) as [|s1 [|s2 [|s3 rest]]]; reflexivity.
   - set (new_val := nibble_of_nat (get_reg s n + 1)).
     destruct (new_val =? 0); reflexivity.
-  - destruct (pop_stack s) as [[?|] ?]; reflexivity.
 Qed.
 
 (* --- KBP mapping & TEST note --- *)
@@ -5301,6 +5318,18 @@ Proof.
   - apply encode_DAA_range.
   - apply encode_KBP_range.
   - apply encode_DCL_range.
+Qed.
+
+Corollary instr_encodes_to_valid_bytes : forall i,
+  instr_wf i ->
+  let '(b1, b2) := encode i in
+  b1 < 256 /\ b2 < 256.
+Proof.
+  intros i Hwf.
+  destruct (encode i) as [b1 b2] eqn:E.
+  assert (H := encode_range i Hwf).
+  rewrite E in H. simpl in H.
+  exact H.
 Qed.
 
 
