@@ -4787,6 +4787,22 @@ Proof.
   intros n s1 s2 Heq. rewrite Heq. reflexivity.
 Qed.
 
+Corollary reg_pair_addressing_invariant : forall s r,
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg_pair s (r + 1).
+Proof.
+  intros s r Heven.
+  unfold get_reg_pair.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  assert (Hr1_even: (r + 1) - (r + 1) mod 2 = r).
+  { replace ((r + 1) mod 2) with 1.
+    - lia.
+    - rewrite Nat.add_mod by lia.
+      rewrite Heven. simpl. reflexivity. }
+  rewrite Hr_even, Hr1_even.
+  reflexivity.
+Qed.
+
 (* ==================== Fetch increment equalities ==================== *)
 
 Lemma pc_inc1_unfold : forall s,
