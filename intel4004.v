@@ -1674,6 +1674,82 @@ Proof.
   simpl; lia.
 Qed.
 
+Lemma reset_state_WF : forall s, WF s -> WF (reset_state s).
+Proof.
+  intros s HWF.
+  unfold reset_state, WF in *.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  simpl.
+  split. assumption.
+  split. assumption.
+  split. lia.
+  split. lia.
+  split. lia.
+  split. constructor.
+  split. assumption.
+  split. assumption.
+  split. unfold NBANKS; lia.
+  split. apply default_sel_WF.
+  split. vm_compute; reflexivity.
+  split. vm_compute; repeat constructor.
+  split. lia.
+  split. assumption.
+  split. assumption.
+  split. lia.
+  lia.
+Qed.
+
+Lemma reset_state_clears_volatile : forall s,
+  let s' := reset_state s in
+  acc s' = 0 /\
+  carry s' = false /\
+  pc s' = 0 /\
+  stack s' = [] /\
+  cur_bank s' = 0 /\
+  sel_ram s' = mkRAMSel 0 0 0 /\
+  sel_rom s' = 0 /\
+  prom_enable s' = false /\
+  prom_addr s' = 0 /\
+  prom_data s' = 0.
+Proof.
+  intros s. unfold reset_state. simpl. repeat split.
+Qed.
+
+Lemma reset_state_preserves_memory : forall s,
+  let s' := reset_state s in
+  regs s' = regs s /\
+  ram_sys s' = ram_sys s /\
+  rom s' = rom s.
+Proof.
+  intros s. unfold reset_state. simpl. repeat split.
+Qed.
+
+Lemma init_is_reset_with_cleared_memory :
+  init_state = reset_state init_state.
+Proof.
+  unfold init_state, reset_state. reflexivity.
+Qed.
+
+Theorem reset_specification : forall s, WF s ->
+  WF (reset_state s) /\
+  acc (reset_state s) = 0 /\
+  carry (reset_state s) = false /\
+  pc (reset_state s) = 0 /\
+  stack (reset_state s) = [] /\
+  regs (reset_state s) = regs s /\
+  ram_sys (reset_state s) = ram_sys s /\
+  rom (reset_state s) = rom s.
+Proof.
+  intros s HWF.
+  split. apply reset_state_WF. assumption.
+  pose proof (reset_state_clears_volatile s) as Hvol.
+  pose proof (reset_state_preserves_memory s) as Hmem.
+  destruct Hvol as [Hacc [Hcarry [Hpc [Hstack _]]]].
+  destruct Hmem as [Hregs [Hram Hrom]].
+  repeat split; assumption.
+Qed.
+
 (* ====================== Preservation lemmas ========================= *)
 
 (** Proves updating main character in WF register preserves WF_reg. *)
@@ -5521,6 +5597,46 @@ Proof.
     rewrite IH; auto.
 Qed.
 
+(* ==================== Program Layout and Linking ==================== *)
+
+Record ProgramLayout := mkLayout {
+  base_addr : nat;
+  code_size : nat
+}.
+
+Definition valid_layout (layout : ProgramLayout) : Prop :=
+  base_addr layout + code_size layout <= 4096.
+
+Definition addr_in_region (addr : nat) (layout : ProgramLayout) : Prop :=
+  base_addr layout <= addr < base_addr layout + code_size layout.
+
+Definition jump_target (i : Instruction) : option nat :=
+  match i with
+  | JUN a => Some a
+  | JMS a => Some a
+  | _ => None
+  end.
+
+Definition program_wf (prog : list Instruction) (layout : ProgramLayout) : Prop :=
+  valid_layout layout /\
+  Forall instr_wf prog /\
+  Forall (fun i => match jump_target i with
+                   | Some addr => addr_in_region addr layout
+                   | None => True
+                   end) prog.
+
+Fixpoint update_region (rom : list byte) (base : nat) (bytes : list byte) {struct rom} : list byte :=
+  match rom with
+  | [] => []
+  | r :: rom' =>
+      match base with
+      | 0 => match bytes with
+             | [] => r :: rom'
+             | b :: bytes' => b :: update_region rom' 0 bytes'
+             end
+      | S n => r :: update_region rom' n bytes
+      end
+  end.
 
 (* ===================================================================== *)
 (*                         HOARE LOGIC LAYER                             *)
