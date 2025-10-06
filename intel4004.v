@@ -3196,9 +3196,9 @@ Proof.
   assert (Hv: v < 256).
   { subst v. apply get_reg_pair_bound_helper; auto. }
   assert (Hhi: hi < 16).
-  { subst hi. apply Nat.div_lt_upper_bound. lia. exact Hv. }
+  { subst hi. apply Nat.Div0.div_lt_upper_bound. exact Hv. }
   assert (Hchip: chip < 4).
-  { subst chip. apply Nat.div_lt_upper_bound. lia. exact Hhi. }
+  { subst chip. apply Nat.Div0.div_lt_upper_bound. exact Hhi. }
   assert (Hrno: rno < 4).
   { subst rno. apply Nat.mod_upper_bound. lia. }
   assert (Hlo: lo < 16).
@@ -4638,7 +4638,7 @@ Proof.
       assert (H1: nth r_even (regs s) 0 * 16 < 16 * 16) by nia.
       assert (H2: nth (r_even + 1) (regs s) 0 < 16) by assumption.
       nia. }
-    assert (get_reg_pair s r / 16 < 16) by (apply Nat.div_lt_upper_bound; lia).
+    assert (get_reg_pair s r / 16 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
     exact H0.
 Qed.
 
@@ -4693,9 +4693,9 @@ Proof.
   set (lo := get_reg_pair s r mod 16) in *.
   set (chip := hi / 4) in *.
   set (rno := hi mod 4) in *.
-  assert (Hhi: hi < 16) by (subst hi; apply Nat.div_lt_upper_bound; lia).
+  assert (Hhi: hi < 16) by (subst hi; apply Nat.Div0.div_lt_upper_bound; lia).
   assert (Hlo: lo < 16) by (subst lo; apply Nat.mod_bound_pos; lia).
-  assert (Hchip: chip < 4) by (subst chip; apply Nat.div_lt_upper_bound; lia).
+  assert (Hchip: chip < 4) by (subst chip; apply Nat.Div0.div_lt_upper_bound; lia).
   assert (Hrno: rno < 4) by (subst rno; apply Nat.mod_bound_pos; lia).
   set (selr := mkRAMSel chip rno lo) in *.
   set (s1 := mkState (acc s) (regs s) (carry s) (pc_inc1 s) (stack s)
@@ -4796,7 +4796,7 @@ Proof.
   assert (Hr1_even: (r + 1) - (r + 1) mod 2 = r).
   { replace ((r + 1) mod 2) with 1.
     - lia.
-    - rewrite Nat.add_mod by lia.
+    - rewrite Nat.Div0.add_mod by lia.
       rewrite Heven. simpl. reflexivity. }
   rewrite Hr_even, Hr1_even.
   reflexivity.
