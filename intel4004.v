@@ -115,6 +115,26 @@ Proof.
 Qed.
 
 (** Proves nth of update_nth at same index returns the updated element. *)
+Lemma nth_update_nth_neq : forall A (l : list A) n m x d,
+  n <> m ->
+  nth n (update_nth m x l) d = nth n l d.
+Proof.
+  intros A l n m x d Hneq.
+  unfold update_nth.
+  destruct (m <? length l) eqn:E; [|reflexivity].
+  apply Nat.ltb_lt in E.
+  generalize dependent n.
+  generalize dependent m.
+  generalize dependent x.
+  induction l as [|a l' IH]; intros.
+  - simpl in E. lia.
+  - destruct m, n; simpl; try reflexivity; try lia.
+    rewrite IH.
+    + reflexivity.
+    + auto with arith.
+    + simpl in E. auto with arith.
+Qed.
+
 Lemma nth_update_nth_eq : forall A (l : list A) n x d,
   n < length l ->
   nth n (update_nth n x l) d = x.
@@ -1257,11 +1277,11 @@ Definition execute (s : Intel4004State) (inst : Instruction) : Intel4004State :=
               (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s)
 
   | KBP =>
-      (* Keyboard Process: Convert 1-of-n code to binary position
-         Returns position (1-4) for single-bit values (1,2,4,8)
-         Returns 15 for any other value (including 0 and multi-bit values)
-         NOTE: Real 4004 behavior for multi-bit inputs is undocumented;
-         returning 15 is a conservative choice matching the datasheet spec. *)
+    (* Keyboard Process: Convert 1-of-n code to binary position.
+       For single-bit inputs: 1→1, 2→2, 4→3, 8→4, 0→0
+       For multi-bit inputs: returns 15 (error indicator)
+       Source: Intel MCS-4 Assembly Language Programming Manual (1973), p.3-35
+       Verified on actual 4004 hardware by Dmitry Grinberg (Linux/4004 project) *)
       let result :=
         match acc s with
         | 0 => 0 | 1 => 1 | 2 => 2 | 4 => 3 | 8 => 4 | _ => 15
@@ -6128,4 +6148,159 @@ Proof.
   { apply execute_IAC_WF; auto. }
   split; [exact HWF2|].
   simpl. reflexivity.
+Qed.
+
+Lemma hoare_XCH_swap : forall r old_acc old_reg,
+  {{ fun s => acc s = old_acc /\ get_reg s r = old_reg /\ r < 16 }}
+     XCH r
+  {{ fun s => acc s = old_reg /\ get_reg s r = old_acc }}.
+Proof.
+  intros r old_acc old_reg.
+  unfold hoare_triple. intros s HWF [Hacc [Hreg Hr]].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR [HforR [Hacc_bound _]]].
+  split.
+  - apply execute_XCH_WF; [exact HWF | unfold instr_wf; exact Hr].
+  - unfold execute. simpl.
+    split.
+    + rewrite Hreg. reflexivity.
+    + unfold get_reg, set_reg. simpl.
+      rewrite nth_update_nth_eq by (rewrite HlenR; exact Hr).
+      unfold nibble_of_nat.
+      rewrite Hacc.
+      rewrite Nat.mod_small by (rewrite <- Hacc; exact Hacc_bound).
+      reflexivity.
+Qed.
+
+Example ex_CMA_involution : forall a,
+  {{| fun s => acc s = a /\ a < 16 |}}
+      [CMA; CMA]
+  {{| fun s => acc s = a |}}.
+Proof.
+  intro a.
+  unfold hoare_prog. intros s HWF [Hacc Ha].
+  simpl exec_program.
+  assert (HWF1: WF (execute s CMA)).
+  { apply execute_CMA_WF. exact HWF. }
+  assert (HWF2: WF (execute (execute s CMA) CMA)).
+  { apply execute_CMA_WF. exact HWF1. }
+  split. exact HWF2.
+  unfold execute. simpl.
+  rewrite Hacc.
+  do 16 (destruct a; simpl; [reflexivity|]); lia.
+Qed.
+
+Lemma hoare_ADD_carry : forall r a b c,
+  {{ fun s => acc s = a /\ get_reg s r = b /\ carry s = c /\ r < 16 /\ a < 16 /\ b < 16 }}
+     ADD r
+  {{ fun s => carry s = (16 <=? (a + b + (if c then 1 else 0))) }}.
+Proof.
+  intros r a b c.
+  unfold hoare_triple. intros s HWF [Hacc [Hreg [Hcarry [Hr [Ha Hb]]]]].
+  split.
+  - apply execute_ADD_WF; [exact HWF | unfold instr_wf; exact Hr].
+  - unfold execute. simpl.
+    rewrite Hacc, Hreg, Hcarry. reflexivity.
+Qed.
+
+Example ex_copy_nibble : forall x,
+  {{| fun s => get_reg s 5 = x /\ x < 16 |}}
+      [LD 5; XCH 7]
+  {{| fun s => get_reg s 5 = x /\ get_reg s 7 = x |}}.
+Proof.
+  intro x.
+  unfold hoare_prog. intros s HWF [Hr5 Hx].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LD 5))).
+  { apply execute_LD_WF; [exact HWF | unfold instr_wf; lia]. }
+  assert (HWF2: WF (execute (execute s (LD 5)) (XCH 7))).
+  { apply execute_XCH_WF; [exact HWF1 | unfold instr_wf; lia]. }
+  split. exact HWF2.
+  unfold execute, get_reg, set_reg in *. simpl.
+  destruct HWF as [HlenR _].
+  assert (Hlen7: 7 < length (regs s)) by (rewrite HlenR; lia).
+  split.
+  - rewrite nth_update_nth_neq by lia. exact Hr5.
+  - rewrite nth_update_nth_eq by exact Hlen7.
+    unfold nibble_of_nat.
+    rewrite Hr5.
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+Qed.
+
+Example ex_accumulator_pipeline :
+  {{| fun s => carry s = false |}}
+      [LDM 3; XCH 2; LDM 7; ADD 2]
+  {{| fun s => acc s = 10 /\ get_reg s 2 = 3 |}}.
+Proof.
+  unfold hoare_prog. intros s HWF Hcarry.
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LDM 3))).
+  { apply execute_LDM_WF; [exact HWF | unfold instr_wf; lia]. }
+  assert (HWF2: WF (execute (execute s (LDM 3)) (XCH 2))).
+  { apply execute_XCH_WF; [exact HWF1 | unfold instr_wf; lia]. }
+  assert (HWF3: WF (execute (execute (execute s (LDM 3)) (XCH 2)) (LDM 7))).
+  { apply execute_LDM_WF; [exact HWF2 | unfold instr_wf; lia]. }
+  assert (HWF4: WF (execute (execute (execute (execute s (LDM 3)) (XCH 2)) (LDM 7)) (ADD 2))).
+  { apply execute_ADD_WF; [exact HWF3 | unfold instr_wf; lia]. }
+  split. exact HWF4.
+  unfold execute. simpl.
+  destruct HWF as [HlenR _].
+  assert (Hlen2: 2 < length (regs s)) by (rewrite HlenR; lia).
+  unfold get_reg, set_reg. simpl.
+  rewrite nth_update_nth_eq by exact Hlen2.
+  unfold nibble_of_nat. simpl.
+  rewrite Hcarry. simpl. split; reflexivity.
+Qed.
+
+Example ex_jms_bbl_roundtrip : forall addr data old_pc,
+  {{| fun s => pc s = old_pc /\ addr < 4096 /\ data < 16 /\ length (stack s) <= 2 |}}
+      [JMS addr; BBL data]
+  {{| fun s => pc s = addr12_of_nat (old_pc + 2) /\ acc s = data /\ length (stack s) <= 2 |}}.
+Proof.
+  intros addr data old_pc.
+  unfold hoare_prog. intros s HWF [Hpc [Haddr [Hdata Hstack]]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (JMS addr))).
+  { apply execute_JMS_WF; [exact HWF | unfold instr_wf; exact Haddr]. }
+  assert (HWF2: WF (execute (execute s (JMS addr)) (BBL data))).
+  { apply execute_BBL_WF; [exact HWF1 | unfold instr_wf; exact Hdata]. }
+  split. exact HWF2.
+  unfold execute. simpl.
+  unfold push_stack, pop_stack. simpl.
+  rewrite Hpc.
+  destruct (stack s) as [|h1 [|h2 [|h3 rest]]]; simpl.
+  - unfold nibble_of_nat. rewrite Nat.mod_small by exact Hdata.
+    split. reflexivity. split. reflexivity. lia.
+  - unfold nibble_of_nat. rewrite Nat.mod_small by exact Hdata.
+    split. reflexivity. split. reflexivity. lia.
+  - unfold nibble_of_nat. rewrite Nat.mod_small by exact Hdata.
+    split. reflexivity. split. reflexivity. lia.
+  - simpl in Hstack. lia.
+Qed.
+
+Example ex_stack_discipline : forall addr1 addr2 d1 d2 old_pc,
+  {{| fun s => pc s = old_pc /\ length (stack s) = 0 /\
+               addr1 < 4096 /\ addr2 < 4096 /\ d1 < 16 /\ d2 < 16 |}}
+      [JMS addr1; BBL d1; JMS addr2; BBL d2]
+  {{| fun s => length (stack s) = 0 /\ pc s = addr12_of_nat (old_pc + 4) |}}.
+Proof.
+  intros addr1 addr2 d1 d2 old_pc.
+  unfold hoare_prog. intros s HWF [Hpc [Hlen [Ha1 [Ha2 [Hd1 Hd2]]]]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (JMS addr1))).
+  { apply execute_JMS_WF; [exact HWF | unfold instr_wf; exact Ha1]. }
+  assert (HWF2: WF (execute (execute s (JMS addr1)) (BBL d1))).
+  { apply execute_BBL_WF; [exact HWF1 | unfold instr_wf; exact Hd1]. }
+  assert (HWF3: WF (execute (execute (execute s (JMS addr1)) (BBL d1)) (JMS addr2))).
+  { apply execute_JMS_WF; [exact HWF2 | unfold instr_wf; exact Ha2]. }
+  assert (HWF4: WF (execute (execute (execute (execute s (JMS addr1)) (BBL d1)) (JMS addr2)) (BBL d2))).
+  { apply execute_BBL_WF; [exact HWF3 | unfold instr_wf; exact Hd2]. }
+  split. exact HWF4.
+  unfold execute. simpl.
+  unfold push_stack, pop_stack.
+  assert (Hstack_nil: stack s = []) by (destruct (stack s); [reflexivity | simpl in Hlen; lia]).
+  rewrite Hstack_nil. simpl.
+  rewrite Hpc.
+  split; reflexivity.
 Qed.
