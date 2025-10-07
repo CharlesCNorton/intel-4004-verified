@@ -7076,3 +7076,19 @@ Proof.
   unfold execute. simpl. unfold get_reg in *. simpl in *.
   rewrite Hr0, Hr1, Hcarry. simpl. reflexivity.
 Qed.
+
+Example add_two_nibbles :
+  {{| fun s => (get_reg s 0 = 5 /\ get_reg s 1 = 7 /\ carry s = false) |}}
+      [LD 0; ADD 1]
+  {{| fun s => (acc s = 12) |}}.
+Proof.
+  unfold hoare_prog. intros s HWF [Hr0 [Hr1 Hcarry]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LD 0))).
+  { apply execute_LD_WF; [exact HWF | unfold instr_wf; lia]. }
+  assert (HWF2: WF (execute (execute s (LD 0)) (ADD 1))).
+  { apply execute_ADD_WF; [exact HWF1 | unfold instr_wf; lia]. }
+  split. exact HWF2.
+  unfold execute. simpl. unfold get_reg in *. simpl in *.
+  rewrite Hr0, Hr1, Hcarry. simpl. reflexivity.
+Qed.
