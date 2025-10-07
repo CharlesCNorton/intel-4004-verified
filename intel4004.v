@@ -5418,17 +5418,72 @@ Qed.
 
 Lemma load_program_preserves_WF : forall bytes s base,
   WF s ->
+  base < 4096 ->
   Forall (fun b => b < 256) bytes ->
   WF (load_program s base bytes).
 Proof.
-Admitted.
+  induction bytes as [|b rest IH]; intros s base HWF Hbase Hforall.
+  - simpl. exact HWF.
+  - simpl. inversion Hforall; subst.
+    apply IH.
+    + unfold execute, set_prom_params. simpl.
+      destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+      unfold WF. simpl.
+      split. exact HlenR.
+      split. exact HforR.
+      split. exact Hacc.
+      split. apply addr12_bound.
+      split. exact Hstklen.
+      split. exact HstkFor.
+      split. exact HsysLen.
+      split. exact HsysFor.
+      split. exact Hbank.
+      split. exact Hsel.
+      split. exact HrpLen.
+      split. exact HrpFor.
+      split. exact Hselrom.
+      split. apply Forall_update_nth; assumption.
+      split. rewrite update_nth_length. exact HromLen.
+      split. exact Hbase.
+      exact H1.
+    + apply addr12_bound.
+    + assumption.
+Qed.
 
 Lemma load_preserves_rom_length : forall bytes s base,
   WF s ->
+  base < 4096 ->
   Forall (fun b => b < 256) bytes ->
   length (rom (load_program s base bytes)) = length (rom s).
 Proof.
-Admitted.
+  induction bytes as [|b rest IH]; intros s base HWF Hbase Hforall.
+  - simpl. reflexivity.
+  - simpl. inversion Hforall; subst.
+    rewrite IH.
+    + apply load_program_step_rom_length_weak; assumption.
+    + unfold execute, set_prom_params. simpl.
+      destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+      unfold WF. simpl.
+      split. exact HlenR.
+      split. exact HforR.
+      split. exact Hacc.
+      split. apply addr12_bound.
+      split. exact Hstklen.
+      split. exact HstkFor.
+      split. exact HsysLen.
+      split. exact HsysFor.
+      split. exact Hbank.
+      split. exact Hsel.
+      split. exact HrpLen.
+      split. exact HrpFor.
+      split. exact Hselrom.
+      split. apply Forall_update_nth; assumption.
+      split. rewrite update_nth_length. exact HromLen.
+      split. exact Hbase.
+      exact H1.
+    + apply addr12_bound.
+    + assumption.
+Qed.
 
 Theorem load_then_fetch : forall s base bytes,
   WF s ->
