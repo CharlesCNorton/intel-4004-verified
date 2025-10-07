@@ -4993,7 +4993,7 @@ Qed.
 (*                         TIMING MODEL                                  *)
 (* ===================================================================== *)
 
-Definition cycles (i : Instruction) : nat :=
+Definition cycles (s : Intel4004State) (i : Instruction) : nat :=
   match i with
   | NOP => 8
   | ADD _ | SUB _ | LD _ | XCH _ | LDM _ | INC _ => 8
@@ -5003,36 +5003,64 @@ Definition cycles (i : Instruction) : nat :=
   | BBL _ => 8
   | FIM _ _ | FIN _ | JIN _ | JUN _ | SRC _ => 16
   | JMS _ => 24
-  | JCN _ _ | ISZ _ _ => 16
+  | JCN cond _ =>
+      let c1 := cond / 8 in
+      let c2 := (cond / 4) mod 2 in
+      let c3 := (cond / 2) mod 2 in
+      let c4 := cond mod 2 in
+      let base_cond := orb (andb (acc s =? 0) (c2 =? 1))
+                           (orb (andb (carry s) (c3 =? 1))
+                                (andb (negb (test_pin s)) (c4 =? 1))) in
+      let jump := if c1 =? 1 then negb base_cond else base_cond in
+      if jump then 16 else 8
+  | ISZ r _ =>
+      let new_val := nibble_of_nat (get_reg s r + 1) in
+      if new_val =? 0 then 8 else 16
   end.
 
-Lemma max_cycles_per_instruction : forall i,
-  cycles i <= 24.
+Lemma max_cycles_per_instruction : forall s i,
+  cycles s i <= 24.
 Proof.
-  intros i. destruct i; simpl; lia.
+  intros s i. destruct i; unfold cycles; try lia.
+  - destruct (if (n / 8 =? 1)
+              then negb (orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
+                             (orb (andb (carry s) ((n / 2) mod 2 =? 1))
+                                  (andb (negb (test_pin s)) (n mod 2 =? 1))))
+              else orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
+                       (orb (andb (carry s) ((n / 2) mod 2 =? 1))
+                            (andb (negb (test_pin s)) (n mod 2 =? 1)))); lia.
+  - destruct (nibble_of_nat (get_reg s n + 1) =? 0); lia.
 Qed.
 
-Lemma min_cycles_per_instruction : forall i,
-  8 <= cycles i.
+Lemma min_cycles_per_instruction : forall s i,
+  8 <= cycles s i.
 Proof.
-  intros i. destruct i; simpl; lia.
+  intros s i. destruct i; unfold cycles; try lia.
+  - destruct (if (n / 8 =? 1)
+              then negb (orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
+                             (orb (andb (carry s) ((n / 2) mod 2 =? 1))
+                                  (andb (negb (test_pin s)) (n mod 2 =? 1))))
+              else orb (andb (acc s =? 0) ((n / 4) mod 2 =? 1))
+                       (orb (andb (carry s) ((n / 2) mod 2 =? 1))
+                            (andb (negb (test_pin s)) (n mod 2 =? 1)))); lia.
+  - destruct (nibble_of_nat (get_reg s n + 1) =? 0); lia.
 Qed.
 
-Fixpoint program_cycles (prog : list Instruction) : nat :=
+Fixpoint program_cycles (s : Intel4004State) (prog : list Instruction) : nat :=
   match prog with
   | [] => 0
-  | i :: rest => cycles i + program_cycles rest
+  | i :: rest => cycles s i + program_cycles (execute s i) rest
   end.
 
-Theorem cycles_deterministic : forall i,
-  cycles i = cycles i.
+Theorem cycles_deterministic : forall s i,
+  cycles s i = cycles s i.
 Proof.
   intros. reflexivity.
 Qed.
 
 Theorem timing_preserves_WF : forall s i,
   WF s -> instr_wf i ->
-  cycles i = cycles i /\ WF (execute s i).
+  cycles s i = cycles s i /\ WF (execute s i).
 Proof.
   intros s i HWF Hwfi.
   split.
@@ -5097,6 +5125,33 @@ Lemma set_prom_preserves_ram : forall s addr data en,
   ram_sys (set_prom_params s addr data en) = ram_sys s.
 Proof.
   intros. unfold set_prom_params. simpl. reflexivity.
+Qed.
+
+Lemma set_prom_preserves_WF : forall s addr data,
+  WF s -> addr < 4096 -> data < 256 ->
+  WF (set_prom_params s addr data true).
+Proof.
+  intros s addr data HWF Haddr Hdata.
+  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  unfold set_prom_params, WF. simpl.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  assumption.
 Qed.
 
 Lemma wpm_enabled_preserves_regs : forall s,
@@ -5174,6 +5229,7 @@ Qed.
 
 Lemma load_preserves_rom_length : forall bytes s base,
   WF s ->
+  Forall (fun b => b < 256) bytes ->
   length (rom (load_program s base bytes)) = length (rom s).
 Proof.
 Admitted.
