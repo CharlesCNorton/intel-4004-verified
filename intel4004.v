@@ -5971,6 +5971,89 @@ Proof.
   split; auto.
 Qed.
 
+Lemma hoare_disj : forall P1 P2 Q1 Q2 i,
+  {{ P1 }} i {{ Q1 }} ->
+  {{ P2 }} i {{ Q2 }} ->
+  {{ fun s => P1 s \/ P2 s }} i {{ fun s => Q1 s \/ Q2 s }}.
+Proof.
+  intros P1 P2 Q1 Q2 i H1 H2.
+  unfold hoare_triple in *.
+  intros s HWF [HP1 | HP2].
+  - specialize (H1 s HWF HP1).
+    destruct H1 as [HWF' HQ1].
+    split; auto.
+  - specialize (H2 s HWF HP2).
+    destruct H2 as [HWF' HQ2].
+    split; auto.
+Qed.
+
+Lemma hoare_exists : forall A (P Q : A -> Intel4004State -> Prop) i,
+  (forall x, {{ P x }} i {{ Q x }}) ->
+  {{ fun s => exists x, P x s }} i {{ fun s => exists x, Q x s }}.
+Proof.
+  intros A P Q i H.
+  unfold hoare_triple in *.
+  intros s HWF [x HP].
+  specialize (H x s HWF HP).
+  destruct H as [HWF' HQ].
+  split; auto.
+  exists x. exact HQ.
+Qed.
+
+Lemma hoare_frame_regs : forall P Q i R,
+  {{ P }} i {{ Q }} ->
+  writes_regs i = false ->
+  (forall s1 s2, regs s1 = regs s2 -> R s1 -> R s2) ->
+  {{ fun s => P s /\ R s }} i {{ fun s => Q s /\ R s }}.
+Proof.
+  intros P Q i R Htriple Hwrites Hindep.
+  unfold hoare_triple in *.
+  intros s HWF [HP HR].
+  specialize (Htriple s HWF HP).
+  destruct Htriple as [HWF' HQ].
+  split; auto.
+  split; auto.
+  apply (Hindep s (execute s i)).
+  - symmetry. apply execute_regs_frame. exact Hwrites.
+  - exact HR.
+Qed.
+
+Lemma hoare_frame_ram : forall P Q i R,
+  {{ P }} i {{ Q }} ->
+  writes_ram i = false ->
+  (forall s1 s2, ram_sys s1 = ram_sys s2 -> R s1 -> R s2) ->
+  {{ fun s => P s /\ R s }} i {{ fun s => Q s /\ R s }}.
+Proof.
+  intros P Q i R Htriple Hwrites Hindep.
+  unfold hoare_triple in *.
+  intros s HWF [HP HR].
+  specialize (Htriple s HWF HP).
+  destruct Htriple as [HWF' HQ].
+  split; auto.
+  split; auto.
+  apply (Hindep s (execute s i)).
+  - symmetry. apply execute_ram_frame. exact Hwrites.
+  - exact HR.
+Qed.
+
+Lemma hoare_frame_acc : forall P Q i R,
+  {{ P }} i {{ Q }} ->
+  writes_acc i = false ->
+  (forall s1 s2, acc s1 = acc s2 -> R s1 -> R s2) ->
+  {{ fun s => P s /\ R s }} i {{ fun s => Q s /\ R s }}.
+Proof.
+  intros P Q i R Htriple Hwrites Hindep.
+  unfold hoare_triple in *.
+  intros s HWF [HP HR].
+  specialize (Htriple s HWF HP).
+  destruct Htriple as [HWF' HQ].
+  split; auto.
+  split; auto.
+  apply (Hindep s (execute s i)).
+  - symmetry. apply execute_acc_frame. exact Hwrites.
+  - exact HR.
+Qed.
+
 (* ==================== Accumulator Instructions =================== *)
 
 Lemma hoare_LDM : forall n,
@@ -6576,4 +6659,224 @@ Proof.
   - reflexivity.
   - replace (old_pc + 4) with (old_pc + 2 + 2) by lia.
     rewrite <- (addr12_of_nat_add (old_pc + 2) 2); lia.
+Qed.
+
+(* ==================== Derived Lemmas: Common Patterns =================== *)
+
+Lemma copy_reg : forall src dst val,
+  src <> dst ->
+  src < 16 ->
+  dst < 16 ->
+  {{| fun s => get_reg s src = val /\ val < 16 |}}
+      [LD src; XCH dst]
+  {{| fun s => get_reg s src = val /\ get_reg s dst = val |}}.
+Proof.
+  intros src dst val Hneq Hsrc Hdst.
+  unfold hoare_prog. intros s HWF [Hreg Hval].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LD src))).
+  { apply execute_LD_WF; [exact HWF | unfold instr_wf; exact Hsrc]. }
+  assert (HWF2: WF (execute (execute s (LD src)) (XCH dst))).
+  { apply execute_XCH_WF; [exact HWF1 | unfold instr_wf; exact Hdst]. }
+  split. exact HWF2.
+  unfold execute, get_reg, set_reg in *. simpl.
+  destruct HWF as [HlenR _].
+  assert (Hlen_src: src < length (regs s)) by (rewrite HlenR; exact Hsrc).
+  assert (Hlen_dst: dst < length (regs s)) by (rewrite HlenR; exact Hdst).
+  split.
+  - rewrite nth_update_nth_neq by lia. exact Hreg.
+  - rewrite nth_update_nth_eq by exact Hlen_dst.
+    unfold nibble_of_nat.
+    rewrite Hreg.
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+Qed.
+
+Lemma zero_reg : forall r,
+  r < 16 ->
+  {{| fun _ => True |}}
+      [CLB; XCH r]
+  {{| fun s => get_reg s r = 0 |}}.
+Proof.
+  intros r Hr.
+  unfold hoare_prog. intros s HWF _.
+  simpl exec_program.
+  assert (HWF1: WF (execute s CLB)).
+  { apply execute_CLB_WF. exact HWF. }
+  assert (HWF2: WF (execute (execute s CLB) (XCH r))).
+  { apply execute_XCH_WF; [exact HWF1 | unfold instr_wf; exact Hr]. }
+  split. exact HWF2.
+  unfold execute, get_reg, set_reg. simpl.
+  destruct HWF as [HlenR _].
+  assert (Hlen_r: r < length (regs s)) by (rewrite HlenR; exact Hr).
+  rewrite nth_update_nth_eq by exact Hlen_r.
+  unfold nibble_of_nat.
+  simpl. reflexivity.
+Qed.
+
+Lemma nibble_of_nat_idempotent : forall n,
+  nibble_of_nat (nibble_of_nat n) = nibble_of_nat n.
+Proof.
+  intros n.
+  unfold nibble_of_nat.
+  assert (n mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+  rewrite Nat.mod_small by exact H.
+  reflexivity.
+Qed.
+
+Lemma get_reg_after_INC : forall s r,
+  length (regs s) = 16 ->
+  r < 16 ->
+  get_reg (execute s (INC r)) r = nibble_of_nat (get_reg s r + 1).
+Proof.
+  intros s r Hlen Hr.
+  unfold execute, get_reg, set_reg. simpl.
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  apply nibble_of_nat_idempotent.
+Qed.
+
+Lemma inc_reg : forall r old,
+  r < 16 ->
+  {{| fun s => get_reg s r = old /\ old < 16 |}}
+      [INC r]
+  {{| fun s => get_reg s r = (old + 1) mod 16 |}}.
+Proof.
+  intros r old Hr.
+  unfold hoare_prog. intros s HWF [Hreg Hold].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (INC r))).
+  { apply execute_INC_WF; [exact HWF | unfold instr_wf; exact Hr]. }
+  split. exact HWF1.
+  unfold execute, get_reg, set_reg. simpl.
+  destruct HWF as [HlenR _].
+  assert (Hlen_r: r < length (regs s)) by (rewrite HlenR; exact Hr).
+  rewrite nth_update_nth_eq by exact Hlen_r.
+  unfold nibble_of_nat.
+  rewrite Nat.mod_mod by lia.
+  f_equal. unfold get_reg in Hreg. rewrite Hreg. reflexivity.
+Qed.
+
+(* ==================== Automation Tactics =================== *)
+
+Ltac hoare_auto :=
+  match goal with
+  | |- {{ _ }} NOP {{ _ }} => apply hoare_NOP
+  | |- {{ _ }} CLB {{ _ }} => apply hoare_CLB
+  | |- {{ _ }} CLC {{ _ }} => apply hoare_CLC
+  | |- {{ _ }} STC {{ _ }} => apply hoare_STC
+  | |- {{ _ }} CMC {{ _ }} => apply hoare_CMC
+  | |- {{ _ }} CMA {{ _ }} => apply hoare_CMA
+  | |- {{ _ }} IAC {{ _ }} => apply hoare_IAC
+  | |- {{ _ }} DAC {{ _ }} => apply hoare_DAC
+  | |- {{ _ }} RAL {{ _ }} => apply hoare_RAL
+  | |- {{ _ }} RAR {{ _ }} => apply hoare_RAR
+  | |- {{ _ }} TCC {{ _ }} => apply hoare_TCC
+  | |- {{ _ }} TCS {{ _ }} => apply hoare_TCS
+  | |- {{ _ }} DAA {{ _ }} => apply hoare_DAA
+  | |- {{ _ }} KBP {{ _ }} => apply hoare_KBP
+  | |- {{ _ }} LDM _ {{ _ }} => apply hoare_LDM
+  | |- {{ _ }} LD _ {{ _ }} => apply hoare_LD
+  | |- {{ _ }} INC _ {{ _ }} => apply hoare_INC
+  | |- {{ _ }} ADD _ {{ _ }} => apply hoare_ADD
+  | |- {{ _ }} SUB _ {{ _ }} => apply hoare_SUB
+  | |- {{ _ }} XCH _ {{ _ }} => apply hoare_XCH
+  | |- {{ _ }} RDM {{ _ }} => apply hoare_RDM
+  | |- {{ _ }} WRM {{ _ }} => apply hoare_WRM
+  | |- {{ _ }} ADM {{ _ }} => apply hoare_ADM
+  | |- {{ _ }} SBM {{ _ }} => apply hoare_SBM
+  | |- {{ _ }} DCL {{ _ }} => apply hoare_DCL
+  | |- {{ _ }} JUN _ {{ _ }} => apply hoare_JUN
+  | |- {{ _ }} JMS _ {{ _ }} => apply hoare_JMS
+  | |- {{ _ }} BBL _ {{ _ }} => apply hoare_BBL
+  | _ => fail "No matching Hoare rule"
+  end.
+
+Example hoare_auto_test :
+  {{ fun _ => True }}
+     CLB
+  {{ fun s => acc s = 0 }}.
+Proof.
+  apply hoare_consequence with (P := fun _ => True) (Q := fun s => acc s = 0 /\ carry s = false).
+  - intros; auto.
+  - apply hoare_CLB.
+  - intros s [H _]. exact H.
+Qed.
+
+(* ==================== Verified Subroutines =================== *)
+
+Example ram_write_read_roundtrip : forall r val,
+  val < 16 ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  {{| fun s => acc s = val |}}
+      [SRC r; WRM; RDM]
+  {{| fun s => acc s = val |}}.
+Proof.
+  intros r val Hval Hr Hodd.
+  unfold hoare_prog. intros s HWF Hacc.
+  simpl exec_program.
+  assert (HWF1: WF (execute s (SRC r))).
+  { apply execute_SRC_WF; [exact HWF | unfold instr_wf; split; [exact Hr | exact Hodd]]. }
+  assert (HWF2: WF (execute (execute s (SRC r)) WRM)).
+  { apply execute_WRM_WF. exact HWF1. }
+  assert (HWF3: WF (execute (execute (execute s (SRC r)) WRM) RDM)).
+  { apply execute_RDM_WF. exact HWF2. }
+  split. exact HWF3.
+  pose proof (wrm_then_rdm_reads_back s r HWF) as H.
+  rewrite Hacc in H. exact H.
+Qed.
+
+Example double_accumulator : forall v,
+  {{| fun s => acc s = v /\ carry s = false /\ v < 8 |}}
+      [RAL]
+  {{| fun s => acc s = 2 * v /\ carry s = false |}}.
+Proof.
+  intro v.
+  unfold hoare_prog. intros s HWF [Hacc [Hcarry Hv]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s RAL)).
+  { apply execute_RAL_WF. exact HWF. }
+  split. exact HWF1.
+  unfold execute. simpl.
+  rewrite Hacc, Hcarry. simpl.
+  do 8 (destruct v; simpl; [split; [reflexivity | reflexivity] | ]); lia.
+Qed.
+
+Example halve_accumulator : forall v,
+  {{| fun s => acc s = v /\ carry s = false /\ v < 16 |}}
+      [RAR]
+  {{| fun s => acc s = v / 2 |}}.
+Proof.
+  intro v.
+  unfold hoare_prog. intros s HWF [Hacc [Hcarry Hv]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s RAR)).
+  { apply execute_RAR_WF. exact HWF. }
+  split. exact HWF1.
+  unfold execute. simpl.
+  rewrite Hacc, Hcarry. simpl.
+  do 16 (destruct v; simpl; [reflexivity | ]); lia.
+Qed.
+
+Example test_bit_zero : forall v,
+  {{| fun s => acc s = v /\ v < 16 |}}
+      [RAR; TCC]
+  {{| fun s => acc s = (if v mod 2 =? 1 then 1 else 0) /\ carry s = false |}}.
+Proof.
+  intro v.
+  unfold hoare_prog. intros s HWF [Hacc Hv].
+  simpl exec_program.
+  assert (HWF1: WF (execute s RAR)).
+  { apply execute_RAR_WF. exact HWF. }
+  assert (HWF2: WF (execute (execute s RAR) TCC)).
+  { apply execute_TCC_WF. exact HWF1. }
+  split. exact HWF2.
+  unfold execute. simpl.
+  rewrite Hacc. simpl.
+  destruct (v mod 2) eqn:Emod.
+  - simpl. split; reflexivity.
+  - destruct n.
+    + simpl. split; reflexivity.
+    + assert (v mod 2 < 2) by (apply Nat.mod_upper_bound; lia).
+      lia.
 Qed.
