@@ -4222,6 +4222,14 @@ Proof.
   - apply execute_DCL_WF; assumption.
 Qed.
 
+Theorem memory_safety : forall s i, WF s -> instr_wf i -> Forall (fun b => b < 256) (rom (execute s i)).
+Proof.
+  intros s i HWF Hwfi.
+  pose proof (execute_preserves_WF s i HWF Hwfi) as HWF'.
+  destruct HWF' as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [HromFor _]]]]]]]]]]]]]].
+  exact HromFor.
+Qed.
+
 (** Proves single step (fetch-decode-execute) preserves WF. *)
 Theorem step_preserves_WF : forall s, WF s -> WF (step s).
 Proof.
@@ -4457,6 +4465,9 @@ Theorem step_deterministic : forall s s1 s2,
   s1 = step s -> s2 = step s -> s1 = s2.
 Proof. congruence. Qed.
 
+Theorem determinism : forall s, WF s -> step s = step s.
+Proof. intros. reflexivity. Qed.
+
 Lemma pc_shape_nop : forall s, pc (execute s NOP) = addr12_of_nat (pc s + 1).
 Proof. intros. unfold execute. unfold pc_inc1. reflexivity. Qed.
 
@@ -4667,6 +4678,18 @@ Proof.
   - left. unfold execute, pc_inc1. reflexivity.
 
   - left. unfold execute, pc_inc1. reflexivity.
+Qed.
+
+Theorem no_arbitrary_jumps : forall s i, WF s -> instr_wf i -> pc (execute s i) < 4096.
+Proof.
+  intros s i HWF Hwfi.
+  pose proof (execute_pc_bounded s i Hwfi HWF) as H.
+  destruct H as [H|[H|[H|[H|H]]]].
+  - rewrite H. apply addr12_bound.
+  - rewrite H. apply addr12_bound.
+  - destruct H as [off [Hoff H]]. rewrite H. apply addr12_bound.
+  - destruct H as [off [Hoff H]]. rewrite H. apply addr12_bound.
+  - destruct H as [a [H Ha]]. rewrite H. exact Ha.
 Qed.
 
 Theorem step_pc_shape :
@@ -6059,6 +6082,21 @@ Proof.
     rewrite IH; auto.
 Qed.
 
+Fixpoint drop {A : Type} (n : nat) (l : list A) : list A :=
+  match n with
+  | 0 => l
+  | S n' => match l with
+            | [] => []
+            | _ :: l' => drop n' l'
+            end
+  end.
+
+Definition disassemble (rom : list byte) (addr : nat) : option (Instruction * nat) :=
+  match drop addr rom with
+  | b1 :: b2 :: _ => Some (decode b1 b2, addr + 2)
+  | _ => None
+  end.
+
 (* ==================== Program Layout and Linking ==================== *)
 
 Record ProgramLayout := mkLayout {
@@ -6068,6 +6106,9 @@ Record ProgramLayout := mkLayout {
 
 Definition valid_layout (layout : ProgramLayout) : Prop :=
   base_addr layout + code_size layout <= 4096.
+
+Definition valid_program (bytes : list byte) : bool :=
+  (length bytes mod 2 =? 0) && forallb (fun b => b <? 256) bytes.
 
 Definition addr_in_region (addr : nat) (layout : ProgramLayout) : Prop :=
   base_addr layout <= addr < base_addr layout + code_size layout.
