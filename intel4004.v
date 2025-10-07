@@ -7053,3 +7053,26 @@ Proof.
     + assert (v mod 2 < 2) by (apply Nat.mod_upper_bound; lia).
       lia.
 Qed.
+
+Lemma max_nibbles : forall a b : nat,
+  a < 16 -> b < 16 -> Nat.max a b < 16.
+Proof.
+  intros a b Ha Hb.
+  destruct (Nat.max_spec a b) as [[_ ->]|[_ ->]]; assumption.
+Qed.
+
+Example max_of_two_concrete :
+  {{| fun s => (get_reg s 0 = 7 /\ get_reg s 1 = 3 /\ carry s = false) |}}
+      [LD 0; SUB 1]
+  {{| fun s => (carry s = true) |}}.
+Proof.
+  unfold hoare_prog. intros s HWF [Hr0 [Hr1 Hcarry]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s (LD 0))).
+  { apply execute_LD_WF; [exact HWF | unfold instr_wf; lia]. }
+  assert (HWF2: WF (execute (execute s (LD 0)) (SUB 1))).
+  { apply execute_SUB_WF; [exact HWF1 | unfold instr_wf; lia]. }
+  split. exact HWF2.
+  unfold execute. simpl. unfold get_reg in *. simpl in *.
+  rewrite Hr0, Hr1, Hcarry. simpl. reflexivity.
+Qed.
