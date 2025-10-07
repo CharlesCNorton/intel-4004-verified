@@ -5227,6 +5227,179 @@ Proof.
   apply update_nth_length.
 Qed.
 
+Lemma set_prom_preserves_rom_length : forall s addr data en,
+  length (rom (set_prom_params s addr data en)) = length (rom s).
+Proof.
+  intros. unfold set_prom_params. simpl. reflexivity.
+Qed.
+
+Lemma load_program_step_preserves_WF : forall s base b,
+  WF s -> base < 4096 -> b < 256 ->
+  WF (execute (set_prom_params s base b true) WPM).
+Proof.
+  intros s base b HWF Hbase Hb.
+  apply execute_WPM_WF.
+  apply set_prom_preserves_WF; assumption.
+Qed.
+
+Lemma load_program_step_rom_length : forall s base b,
+  WF s -> base < 4096 -> b < 256 ->
+  length (rom (execute (set_prom_params s base b true) WPM)) = length (rom s).
+Proof.
+  intros s base b HWF Hbase Hb.
+  rewrite wpm_step_rom_length.
+  - rewrite set_prom_preserves_rom_length. reflexivity.
+  - apply set_prom_preserves_WF; assumption.
+  - apply set_prom_enable_true.
+Qed.
+
+Lemma load_program_step_rom_length_weak : forall s base b,
+  WF s -> b < 256 ->
+  length (rom (execute (set_prom_params s base b true) WPM)) = length (rom s).
+Proof.
+  intros s base b HWF Hb.
+  unfold execute, set_prom_params. simpl.
+  rewrite update_nth_length. reflexivity.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_regs_length : forall s base b,
+  length (regs s) = 16 ->
+  length (regs (execute (set_prom_params s base b true) WPM)) = 16.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_regs_forall : forall s base b,
+  Forall (fun x => x < 16) (regs s) ->
+  Forall (fun x => x < 16) (regs (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_acc_bound : forall s base b,
+  acc s < 16 ->
+  acc (execute (set_prom_params s base b true) WPM) < 16.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_pc_bound : forall s base b,
+  pc (execute (set_prom_params s base b true) WPM) < 4096.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. apply addr12_bound.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_stack_length : forall s base b,
+  length (stack s) <= 3 ->
+  length (stack (execute (set_prom_params s base b true) WPM)) <= 3.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_stack_forall : forall s base b,
+  Forall (fun a => a < 4096) (stack s) ->
+  Forall (fun a => a < 4096) (stack (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_ram_length : forall s base b,
+  length (ram_sys s) = NBANKS ->
+  length (ram_sys (execute (set_prom_params s base b true) WPM)) = NBANKS.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_ram_forall : forall s base b,
+  Forall WF_bank (ram_sys s) ->
+  Forall WF_bank (ram_sys (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_bank_bound : forall s base b,
+  cur_bank s < NBANKS ->
+  cur_bank (execute (set_prom_params s base b true) WPM) < NBANKS.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_sel_wf : forall s base b,
+  WF_sel (sel_ram s) ->
+  WF_sel (sel_ram (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_rom_ports_length : forall s base b,
+  length (rom_ports s) = 16 ->
+  length (rom_ports (execute (set_prom_params s base b true) WPM)) = 16.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_rom_ports_forall : forall s base b,
+  Forall (fun x => x < 16) (rom_ports s) ->
+  Forall (fun x => x < 16) (rom_ports (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_preserves_sel_rom_bound : forall s base b,
+  sel_rom s < 16 ->
+  sel_rom (execute (set_prom_params s base b true) WPM) < 16.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_rom_forall : forall s base b,
+  WF s -> b < 256 ->
+  Forall (fun x => x < 256) (rom (execute (set_prom_params s base b true) WPM)).
+Proof.
+  intros s base b HWF Hb.
+  destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [HromFor _]]]]]]]]]]]]]].
+  unfold execute, set_prom_params. simpl.
+  apply Forall_update_nth; assumption.
+Qed.
+
+Lemma set_prom_then_wpm_rom_length : forall s base b,
+  length (rom s) = 4096 ->
+  length (rom (execute (set_prom_params s base b true) WPM)) = 4096.
+Proof.
+  intros. unfold execute, set_prom_params. simpl.
+  rewrite update_nth_length. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_prom_addr_bound : forall s base b,
+  base < 4096 ->
+  prom_addr (execute (set_prom_params s base b true) WPM) < 4096.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma set_prom_then_wpm_prom_data_bound : forall s base b,
+  b < 256 ->
+  prom_data (execute (set_prom_params s base b true) WPM) < 256.
+Proof.
+  intros. unfold execute, set_prom_params. simpl. assumption.
+Qed.
+
+Lemma load_program_step_preserves_WF_simple : forall s base b,
+  WF s -> base < 4096 -> b < 256 ->
+  WF (execute (set_prom_params s base b true) WPM).
+Proof.
+  intros s base b HWF Hbase Hb.
+  apply execute_WPM_WF.
+  apply set_prom_preserves_WF; assumption.
+Qed.
+
+Lemma load_program_preserves_WF : forall bytes s base,
+  WF s ->
+  Forall (fun b => b < 256) bytes ->
+  WF (load_program s base bytes).
+Proof.
+Admitted.
+
 Lemma load_preserves_rom_length : forall bytes s base,
   WF s ->
   Forall (fun b => b < 256) bytes ->
