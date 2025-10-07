@@ -135,6 +135,7 @@ Proof.
     + simpl in E. auto with arith.
 Qed.
 
+(** Proves nth of update_nth at updated index equals the new element. *)
 Lemma nth_update_nth_eq : forall A (l : list A) n x d,
   n < length l ->
   nth n (update_nth n x l) d = x.
@@ -1152,6 +1153,7 @@ Proof.
     reflexivity.
 Qed.
 
+(** Proves encode is canonical for decoded well-formed instructions. *)
 Theorem encode_decode_canonical : forall b1 b2,
   b1 < 256 -> b2 < 256 ->
   let i := decode b1 b2 in
@@ -1708,6 +1710,7 @@ Proof.
   simpl; lia.
 Qed.
 
+(** Proves reset_state preserves WF invariant. *)
 Lemma reset_state_WF : forall s, WF s -> WF (reset_state s).
 Proof.
   intros s HWF.
@@ -1734,6 +1737,7 @@ Proof.
   lia.
 Qed.
 
+(** Proves reset_state clears all volatile CPU state fields. *)
 Lemma reset_state_clears_volatile : forall s,
   let s' := reset_state s in
   acc s' = 0 /\
@@ -1750,6 +1754,7 @@ Proof.
   intros s. unfold reset_state. simpl. repeat split.
 Qed.
 
+(** Proves reset_state preserves all memory fields (registers, RAM, ROM). *)
 Lemma reset_state_preserves_memory : forall s,
   let s' := reset_state s in
   regs s' = regs s /\
@@ -1759,12 +1764,14 @@ Proof.
   intros s. unfold reset_state. simpl. repeat split.
 Qed.
 
+(** Proves init_state equals reset_state applied to itself (idempotent initialization). *)
 Lemma init_is_reset_with_cleared_memory :
   init_state = reset_state init_state.
 Proof.
   unfold init_state, reset_state. reflexivity.
 Qed.
 
+(** Proves reset_state satisfies complete reset specification: preserves WF and memory, clears CPU state. *)
 Theorem reset_specification : forall s, WF s ->
   WF (reset_state s) /\
   acc (reset_state s) = 0 /\
@@ -1812,6 +1819,7 @@ Proof.
   - eapply Forall_update_nth; eauto. apply nibble_lt16.
 Qed.
 
+(** Proves updating register in WF chip preserves WF_chip. *)
 Lemma WF_chip_upd_reg : forall ch r rg,
   WF_chip ch -> WF_reg rg -> WF_chip (upd_reg_in_chip ch r rg).
 Proof.
@@ -2104,7 +2112,7 @@ Proof.
   destruct n; simpl; exact I.
 Qed.
 
-(* Helper lemma: opcode 15 instructions never match JUN/JMS *)
+(** Proves opcode 15 instructions never match JUN or JMS. *)
 Lemma opcode_15_not_jun_jms : forall b1 b2,
   b1 / 16 = 15 ->
   match decode b1 b2 with
@@ -2136,8 +2144,7 @@ Proof.
     exact I.
 Qed.
 
-(* Helper: opcodes 6-13 never produce JUN/JMS *)
-(* Opcodes 6-13 (INC through ADD) never decode to absolute jumps. *)
+(** Proves opcodes 6-13 never decode to absolute jumps. *)
 Lemma decode_opcodes_6_to_13_not_jun_jms : forall b1 b2,
   6 <= b1 / 16 <= 13 ->
   match decode b1 b2 with
@@ -2153,8 +2160,7 @@ Proof.
     rewrite H0; simpl; trivial.
 Qed.
 
-(* Helper: opcodes >= 16 produce NOP, never JUN/JMS *)
-(* Out-of-range opcodes (≥16) decode to NOP, never produce absolute jumps. *)
+(** Proves out-of-range opcodes decode to NOP and never produce absolute jumps. *)
 Lemma decode_opcode_16_plus_not_jun_jms : forall b1 b2,
   b1 / 16 >= 16 ->
   match decode b1 b2 with
@@ -2182,8 +2188,7 @@ Proof.
   destruct n; try lia.
 Qed.
 
-(* Decode params are wf enough for absolute JUN/JMS *)
-(* All decoded JUN/JMS instructions have 12-bit addresses < 4096. *)
+(** Proves all decoded JUN or JMS instructions have 12-bit addresses under 4096. *)
 Lemma decode_instr_wf_jun_jms : forall b1 b2,
   match decode b1 b2 with
   | JUN a | JMS a => a < 4096
@@ -2227,15 +2232,15 @@ Proof.
                  destruct (decode b1 b2); auto; contradiction.
 Qed.
 
-(* Helper lemma for mod 16 bounds *)
-(* Modulo 16 always yields values strictly less than 16. *)
+(** Proves modulo 16 always yields values strictly less than 16. *)
 Lemma mod_16_lt : forall n, n mod 16 < 16.
 Proof. intro n. apply Nat.mod_upper_bound. lia. Qed.
 
-(* Helper for reasoning about mod 2 *)
+(** Proves boolean and propositional equality equivalence for mod 2. *)
 Lemma mod2_eq_iff : forall n, (n mod 2 =? 0) = true <-> n mod 2 = 0.
 Proof. intro n. split; intro H. apply Nat.eqb_eq in H. exact H. apply Nat.eqb_eq. exact H. Qed.
 
+(** Proves boolean inequality for mod 2 equals propositional equality to 1. *)
 Lemma mod2_neq_iff : forall n, (n mod 2 =? 0) = false <-> n mod 2 = 1.
 Proof.
   intro n. split; intro H.
@@ -2245,8 +2250,7 @@ Proof.
   - apply Nat.eqb_neq. intro Hc. rewrite H in Hc. discriminate.
 Qed.
 
-(* Simplification lemma for mod expressions *)
-(* Nested modulo simplification: (n mod 16) mod 2 = n mod 2. *)
+(** Proves nested modulo simplification for mod 16 then mod 2. *)
 Lemma mod_16_mod_2_eq : forall n, (n mod 16) mod 2 = n mod 2.
 Proof.
   intro n.
@@ -2268,6 +2272,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Proves boolean equality check simplification for nested modulo. *)
 Lemma simpl_mod2_check : forall n, ((n mod 16) mod 2 =? 0) = (n mod 2 =? 0).
 Proof.
   intro n.
@@ -2275,13 +2280,13 @@ Proof.
   reflexivity.
 Qed.
 
-(* Helper lemmas for decode_instr_wf *)
-
+(** Proves NOP instruction satisfies well-formedness predicate. *)
 Lemma decode_NOP_wf : instr_wf NOP.
 Proof.
   unfold instr_wf. trivial.
 Qed.
 
+(** Proves JCN instruction with bounded operands satisfies well-formedness. *)
 Lemma decode_JCN_wf : forall c a,
   c < 16 -> a < 256 -> instr_wf (JCN c a).
 Proof.
@@ -2289,6 +2294,7 @@ Proof.
   unfold instr_wf. split; assumption.
 Qed.
 
+(** Proves FIM instruction with bounded even register and data satisfies well-formedness. *)
 Lemma decode_FIM_wf : forall r d,
   r < 16 -> r mod 2 = 0 -> d < 256 -> instr_wf (FIM r d).
 Proof.
@@ -2296,6 +2302,7 @@ Proof.
   unfold instr_wf. repeat split; assumption.
 Qed.
 
+(** Proves SRC instruction with bounded odd register satisfies well-formedness. *)
 Lemma decode_SRC_wf : forall r,
   r < 16 -> r mod 2 = 1 -> instr_wf (SRC r).
 Proof.
@@ -2303,6 +2310,7 @@ Proof.
   unfold instr_wf. split; assumption.
 Qed.
 
+(** Proves FIN instruction with bounded even register satisfies well-formedness. *)
 Lemma decode_FIN_wf : forall r,
   r < 16 -> r mod 2 = 0 -> instr_wf (FIN r).
 Proof.
@@ -2310,6 +2318,7 @@ Proof.
   unfold instr_wf. split; assumption.
 Qed.
 
+(** Proves JIN instruction with bounded odd register satisfies well-formedness. *)
 Lemma decode_JIN_wf : forall r,
   r < 16 -> r mod 2 = 1 -> instr_wf (JIN r).
 Proof.
@@ -2317,6 +2326,7 @@ Proof.
   unfold instr_wf. split; assumption.
 Qed.
 
+(** Proves JUN instruction with bounded address satisfies well-formedness. *)
 Lemma decode_JUN_wf : forall a,
   a < 4096 -> instr_wf (JUN a).
 Proof.
@@ -2324,6 +2334,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves JMS instruction with bounded address satisfies well-formedness. *)
 Lemma decode_JMS_wf : forall a,
   a < 4096 -> instr_wf (JMS a).
 Proof.
@@ -2331,6 +2342,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves INC instruction with bounded register satisfies well-formedness. *)
 Lemma decode_INC_wf : forall r,
   r < 16 -> instr_wf (INC r).
 Proof.
@@ -2338,6 +2350,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves ISZ instruction with bounded register and address satisfies well-formedness. *)
 Lemma decode_ISZ_wf : forall r a,
   r < 16 -> a < 256 -> instr_wf (ISZ r a).
 Proof.
@@ -2345,6 +2358,7 @@ Proof.
   unfold instr_wf. split; assumption.
 Qed.
 
+(** Proves ADD instruction with bounded register satisfies well-formedness. *)
 Lemma decode_ADD_wf : forall r,
   r < 16 -> instr_wf (ADD r).
 Proof.
@@ -2352,6 +2366,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves SUB instruction with bounded register satisfies well-formedness. *)
 Lemma decode_SUB_wf : forall r,
   r < 16 -> instr_wf (SUB r).
 Proof.
@@ -2359,6 +2374,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves LD instruction with bounded register satisfies well-formedness. *)
 Lemma decode_LD_wf : forall r,
   r < 16 -> instr_wf (LD r).
 Proof.
@@ -2366,6 +2382,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves XCH instruction with bounded register satisfies well-formedness. *)
 Lemma decode_XCH_wf : forall r,
   r < 16 -> instr_wf (XCH r).
 Proof.
@@ -2373,6 +2390,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves BBL instruction with bounded data satisfies well-formedness. *)
 Lemma decode_BBL_wf : forall d,
   d < 16 -> instr_wf (BBL d).
 Proof.
@@ -2380,6 +2398,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves LDM instruction with bounded data satisfies well-formedness. *)
 Lemma decode_LDM_wf : forall d,
   d < 16 -> instr_wf (LDM d).
 Proof.
@@ -2387,6 +2406,7 @@ Proof.
   unfold instr_wf. assumption.
 Qed.
 
+(** Proves all I/O and accumulator instructions satisfy well-formedness. *)
 Lemma decode_other_wf : forall instr,
   (instr = WRM \/ instr = WMP \/ instr = WRR \/ instr = WPM \/
    instr = WR0 \/ instr = WR1 \/ instr = WR2 \/ instr = WR3 \/
@@ -2403,12 +2423,14 @@ Proof.
   rewrite H; trivial.
 Qed.
 
+(** Proves decode with opcode 0 produces well-formed instruction. *)
 Lemma decode_wf_opcode_0 : forall b1 b2,
   b1 / 16 = 0 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
   intros. unfold decode. rewrite H. simpl. exact I.
 Qed.
 
+(** Proves decode with opcode 1 produces well-formed instruction. *)
 Lemma decode_wf_opcode_1 : forall b1 b2,
   b1 / 16 = 1 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2416,6 +2438,7 @@ Proof.
   apply mod_16_lt. assumption.
 Qed.
 
+(** Proves decode with opcode 2 produces well-formed instruction. *)
 Lemma decode_wf_opcode_2 : forall b1 b2,
   b1 / 16 = 2 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2430,6 +2453,7 @@ Proof.
     + apply mod2_neq_iff. exact E.
 Qed.
 
+(** Proves decode with opcode 3 produces well-formed instruction. *)
 Lemma decode_wf_opcode_3 : forall b1 b2,
   b1 / 16 = 3 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2443,6 +2467,7 @@ Proof.
     + apply mod2_neq_iff. exact E.
 Qed.
 
+(** Proves decode with opcode 4 produces well-formed instruction. *)
 Lemma decode_wf_opcode_4 : forall b1 b2,
   b1 / 16 = 4 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2450,6 +2475,7 @@ Proof.
   apply addr12_bound.
 Qed.
 
+(** Proves decode with opcode 5 produces well-formed instruction. *)
 Lemma decode_wf_opcode_5 : forall b1 b2,
   b1 / 16 = 5 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2457,6 +2483,7 @@ Proof.
   apply addr12_bound.
 Qed.
 
+(** Proves decode with opcode 6 produces well-formed instruction. *)
 Lemma decode_wf_opcode_6 : forall b1 b2,
   b1 / 16 = 6 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2464,6 +2491,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 7 produces well-formed instruction. *)
 Lemma decode_wf_opcode_7 : forall b1 b2,
   b1 / 16 = 7 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2471,6 +2499,7 @@ Proof.
   apply mod_16_lt. assumption.
 Qed.
 
+(** Proves decode with opcode 8 produces well-formed instruction. *)
 Lemma decode_wf_opcode_8 : forall b1 b2,
   b1 / 16 = 8 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2478,6 +2507,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 9 produces well-formed instruction. *)
 Lemma decode_wf_opcode_9 : forall b1 b2,
   b1 / 16 = 9 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2485,6 +2515,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 10 produces well-formed instruction. *)
 Lemma decode_wf_opcode_10 : forall b1 b2,
   b1 / 16 = 10 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2492,6 +2523,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 11 produces well-formed instruction. *)
 Lemma decode_wf_opcode_11 : forall b1 b2,
   b1 / 16 = 11 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2499,6 +2531,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 12 produces well-formed instruction. *)
 Lemma decode_wf_opcode_12 : forall b1 b2,
   b1 / 16 = 12 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2506,6 +2539,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 13 produces well-formed instruction. *)
 Lemma decode_wf_opcode_13 : forall b1 b2,
   b1 / 16 = 13 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2513,6 +2547,7 @@ Proof.
   apply mod_16_lt.
 Qed.
 
+(** Proves decode with opcode 14 produces well-formed instruction. *)
 Lemma decode_wf_opcode_14 : forall b1 b2,
   b1 / 16 = 14 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2522,6 +2557,7 @@ Proof.
   destruct m; exact I.
 Qed.
 
+(** Proves decode with opcode 15 produces well-formed instruction. *)
 Lemma decode_wf_opcode_15 : forall b1 b2,
   b1 / 16 = 15 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2530,6 +2566,7 @@ Proof.
     unfold instr_wf; exact I.
 Qed.
 
+(** Proves decode with out-of-range opcode produces well-formed instruction. *)
 Lemma decode_wf_opcode_ge_16 : forall b1 b2,
   b1 / 16 >= 16 -> b2 < 256 -> instr_wf (decode b1 b2).
 Proof.
@@ -2553,11 +2590,13 @@ Proof.
   destruct n; unfold instr_wf; exact I.
 Qed.
 
+(** Proves byte divided by 16 is less than 16. *)
 Lemma b1_div_16_lt_16 : forall b1, b1 < 256 -> b1 / 16 < 16.
 Proof.
   intros. apply Nat.Div0.div_lt_upper_bound. lia.
 Qed.
 
+(** Proves all decoded instructions from valid bytes satisfy well-formedness. *)
 Lemma decode_instr_wf : forall b1 b2,
   b1 < 256 -> b2 < 256 ->
   instr_wf (decode b1 b2).
@@ -2599,8 +2638,7 @@ Proof.
                                                                                                               ************** lia.
 Qed.
 
-(* Helper lemmas for execute_preserves_WF *)
-
+(** Proves NOP preserves well-formedness invariant. *)
 Lemma execute_NOP_preserves_WF : forall s,
   WF s -> WF (execute s NOP).
 Proof.
@@ -2626,7 +2664,7 @@ Proof.
   assumption.  (* prom_data < 256 *)
 Qed.
 
-
+(** Proves NOP execution preserves well-formedness. *)
 Lemma execute_NOP_WF : forall s, WF s -> WF (execute s NOP).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2651,6 +2689,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves LDM execution preserves well-formedness. *)
 Lemma execute_LDM_WF : forall s n, WF s -> instr_wf (LDM n) -> WF (execute s (LDM n)).
 Proof.
   intros s n HWF Hwfi. unfold execute, WF in *. simpl.
@@ -2675,6 +2714,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves LD execution preserves well-formedness. *)
 Lemma execute_LD_WF : forall s r, WF s -> instr_wf (LD r) -> WF (execute s (LD r)).
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
@@ -2699,6 +2739,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves XCH execution preserves well-formedness. *)
 Lemma execute_XCH_WF : forall s r, WF s -> instr_wf (XCH r) -> WF (execute s (XCH r)).
 Proof.
   intros s r HWF Hwfi. unfold execute. simpl.
@@ -2729,6 +2770,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves INC execution preserves well-formedness. *)
 Lemma execute_INC_WF : forall s r, WF s -> instr_wf (INC r) -> WF (execute s (INC r)).
 Proof.
   intros s r HWF Hwfi. unfold execute.
@@ -2759,6 +2801,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves ADD execution preserves well-formedness. *)
 Lemma execute_ADD_WF : forall s r, WF s -> instr_wf (ADD r) -> WF (execute s (ADD r)).
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
@@ -2783,6 +2826,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves SUB execution preserves well-formedness. *)
 Lemma execute_SUB_WF : forall s r, WF s -> instr_wf (SUB r) -> WF (execute s (SUB r)).
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
@@ -2807,6 +2851,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves IAC execution preserves well-formedness. *)
 Lemma execute_IAC_WF : forall s, WF s -> WF (execute s IAC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2831,6 +2876,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves DAC execution preserves well-formedness. *)
 Lemma execute_DAC_WF : forall s, WF s -> WF (execute s DAC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2855,6 +2901,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves CLC execution preserves well-formedness. *)
 Lemma execute_CLC_WF : forall s, WF s -> WF (execute s CLC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2879,6 +2926,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves STC execution preserves well-formedness. *)
 Lemma execute_STC_WF : forall s, WF s -> WF (execute s STC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2903,6 +2951,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves CMC execution preserves well-formedness. *)
 Lemma execute_CMC_WF : forall s, WF s -> WF (execute s CMC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2927,6 +2976,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves CMA execution preserves well-formedness. *)
 Lemma execute_CMA_WF : forall s, WF s -> WF (execute s CMA).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2951,6 +3001,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves CLB execution preserves well-formedness. *)
 Lemma execute_CLB_WF : forall s, WF s -> WF (execute s CLB).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2975,6 +3026,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RAL execution preserves well-formedness. *)
 Lemma execute_RAL_WF : forall s, WF s -> WF (execute s RAL).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -2999,6 +3051,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RAR execution preserves well-formedness. *)
 Lemma execute_RAR_WF : forall s, WF s -> WF (execute s RAR).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -3023,6 +3076,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves TCC execution preserves well-formedness. *)
 Lemma execute_TCC_WF : forall s, WF s -> WF (execute s TCC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -3047,6 +3101,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves TCS execution preserves well-formedness. *)
 Lemma execute_TCS_WF : forall s, WF s -> WF (execute s TCS).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -3071,6 +3126,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves DAA execution preserves well-formedness. *)
 Lemma execute_DAA_WF : forall s, WF s -> WF (execute s DAA).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -3095,6 +3151,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves KBP execution preserves well-formedness. *)
 Lemma execute_KBP_WF : forall s, WF s -> WF (execute s KBP).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
@@ -3136,6 +3193,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves JUN execution preserves well-formedness. *)
 Lemma execute_JUN_WF : forall s a, WF s -> instr_wf (JUN a) -> WF (execute s (JUN a)).
 Proof.
   intros s a HWF Hwfi. unfold execute, WF in *. simpl.
@@ -3160,6 +3218,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves register pair value is bounded by 256. *)
 Lemma get_reg_pair_bound_helper : forall s r,
   length (regs s) = 16 ->
   Forall (fun x => x < 16) (regs s) ->
@@ -3179,6 +3238,7 @@ Proof.
   nia.
 Qed.
 
+(** Proves JMS execution preserves well-formedness. *)
 Lemma execute_JMS_WF : forall s a, WF s -> instr_wf (JMS a) -> WF (execute s (JMS a)).
 Proof.
   intros s a HWF Hwfi. unfold execute.
@@ -3221,6 +3281,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves JCN execution preserves well-formedness. *)
 Lemma execute_JCN_WF : forall s c a, WF s -> instr_wf (JCN c a) -> WF (execute s (JCN c a)).
 Proof.
   intros s c a HWF Hwfi. unfold execute.
@@ -3543,7 +3604,7 @@ Proof.
     assumption.
 Qed.
 
-(* Writing to main RAM preserves system-level bank count invariant. *)
+(** Proves writing to main RAM preserves system-level bank count invariant. *)
 Lemma ram_write_main_sys_preserves_len : forall s v,
   WF s -> length (ram_write_main_sys s v) = NBANKS.
 Proof.
@@ -3561,7 +3622,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
-(* Writing to main RAM preserves well-formedness of all banks. *)
+(** Proves writing to main RAM preserves well-formedness of all banks. *)
 Lemma ram_write_main_sys_preserves_WF_bank : forall s v,
   WF s -> Forall WF_bank (ram_write_main_sys s v).
 Proof.
@@ -3579,6 +3640,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(** Proves writing to status RAM preserves system-level bank count invariant. *)
 Lemma ram_write_status_sys_preserves_len : forall s idx v,
   WF s -> length (ram_write_status_sys s idx v) = NBANKS.
 Proof.
@@ -3596,6 +3658,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(** Proves writing to status RAM preserves well-formedness of all banks. *)
 Lemma ram_write_status_sys_preserves_WF_bank : forall s idx v,
   WF s -> Forall WF_bank (ram_write_status_sys s idx v).
 Proof.
@@ -3613,6 +3676,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(** Proves writing to RAM port preserves system-level bank count invariant. *)
 Lemma ram_write_port_sys_preserves_len : forall s v,
   WF s -> length (ram_write_port_sys s v) = NBANKS.
 Proof.
@@ -3628,6 +3692,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(** Proves writing to RAM port preserves well-formedness of all banks. *)
 Lemma ram_write_port_sys_preserves_WF_bank : forall s v,
   WF s -> Forall WF_bank (ram_write_port_sys s v).
 Proof.
@@ -3643,6 +3708,7 @@ Proof.
   eapply WF_sys_upd_bank; eauto.
 Qed.
 
+(** Proves update_nth preserves list length (wrapper for update_nth_length). *)
 Lemma update_nth_preserves_length : forall A (l : list A) (n : nat) (x : A),
   length (update_nth n x l) = length l.
 Proof.
@@ -3650,6 +3716,7 @@ Proof.
   apply update_nth_length.
 Qed.
 
+(** Proves update_nth preserves Forall (< 16) on nat lists when replacement is bounded. *)
 Lemma update_nth_preserves_Forall16 : forall (l : list nat) (n : nat) (x : nat),
   Forall (fun y => y < 16) l ->
   x < 16 ->
@@ -3659,7 +3726,7 @@ Proof.
   apply Forall_update_nth; auto.
 Qed.
 
-(* Reading from main RAM under WF yields 4-bit value. *)
+(** Proves reading from main RAM under WF yields 4-bit value. *)
 Lemma ram_read_main_bound : forall s,
   WF s ->
   ram_read_main s < 16.
@@ -3677,7 +3744,7 @@ Proof.
   eapply nth_Forall_lt; eauto; lia.
 Qed.
 
-(* Reading from status RAM under WF yields 4-bit value. *)
+(** Proves reading from status RAM under WF yields 4-bit value. *)
 Lemma get_stat_bound : forall s,
   WF s ->
   forall idx,
@@ -3698,6 +3765,7 @@ Proof.
   eapply nth_Forall_lt; eauto; lia.
 Qed.
 
+(** Proves WRM instruction preserves WF invariant. *)
 Lemma execute_WRM_WF : forall s, WF s -> WF (execute s WRM).
 Proof.
   intros s HWF.
@@ -3725,6 +3793,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WMP instruction preserves WF invariant. *)
 Lemma execute_WMP_WF : forall s, WF s -> WF (execute s WMP).
 Proof.
   intros s HWF.
@@ -3752,6 +3821,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WRR instruction preserves WF invariant. *)
 Lemma execute_WRR_WF : forall s, WF s -> WF (execute s WRR).
 Proof.
   intros s HWF. unfold execute.
@@ -3777,6 +3847,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves update_nth preserves Forall (< 256) on nat lists when replacement is bounded. *)
 Lemma update_nth_preserves_Forall256 : forall (l : list nat) (n : nat) (x : nat),
   Forall (fun y => y < 256) l ->
   x < 256 ->
@@ -3786,6 +3857,7 @@ Proof.
   apply Forall_update_nth; auto.
 Qed.
 
+(** Proves WPM instruction preserves WF invariant. *)
 Lemma execute_WPM_WF : forall s, WF s -> WF (execute s WPM).
 Proof.
   intros s HWF. unfold execute.
@@ -3829,6 +3901,7 @@ Proof.
     assumption.
 Qed.
 
+(** Proves WR0 instruction preserves WF invariant. *)
 Lemma execute_WR0_WF : forall s, WF s -> WF (execute s WR0).
 Proof.
   intros s HWF.
@@ -3856,6 +3929,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WR1 instruction preserves WF invariant. *)
 Lemma execute_WR1_WF : forall s, WF s -> WF (execute s WR1).
 Proof.
   intros s HWF.
@@ -3883,6 +3957,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WR2 instruction preserves WF invariant. *)
 Lemma execute_WR2_WF : forall s, WF s -> WF (execute s WR2).
 Proof.
   intros s HWF.
@@ -3910,6 +3985,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WR3 instruction preserves WF invariant. *)
 Lemma execute_WR3_WF : forall s, WF s -> WF (execute s WR3).
 Proof.
   intros s HWF.
@@ -3937,6 +4013,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves SBM instruction preserves WF invariant. *)
 Lemma execute_SBM_WF : forall s, WF s -> WF (execute s SBM).
 Proof.
   intros s HWF. unfold execute, WF in *.
@@ -3961,6 +4038,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RDM instruction preserves WF invariant. *)
 Lemma execute_RDM_WF : forall s, WF s -> WF (execute s RDM).
 Proof.
   intros s HWF.
@@ -3988,6 +4066,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RDR instruction preserves WF invariant. *)
 Lemma execute_RDR_WF : forall s, WF s -> WF (execute s RDR).
 Proof.
   intros s HWF. unfold execute, WF in *.
@@ -4012,6 +4091,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves ADM instruction preserves WF invariant. *)
 Lemma execute_ADM_WF : forall s, WF s -> WF (execute s ADM).
 Proof.
   intros s HWF. unfold execute, WF in *.
@@ -4036,6 +4116,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RD0 instruction preserves WF invariant. *)
 Lemma execute_RD0_WF : forall s, WF s -> WF (execute s RD0).
 Proof.
   intros s HWF.
@@ -4063,6 +4144,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RD1 instruction preserves WF invariant. *)
 Lemma execute_RD1_WF : forall s, WF s -> WF (execute s RD1).
 Proof.
   intros s HWF.
@@ -4090,6 +4172,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RD2 instruction preserves WF invariant. *)
 Lemma execute_RD2_WF : forall s, WF s -> WF (execute s RD2).
 Proof.
   intros s HWF.
@@ -4117,6 +4200,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves RD3 instruction preserves WF invariant. *)
 Lemma execute_RD3_WF : forall s, WF s -> WF (execute s RD3).
 Proof.
   intros s HWF.
@@ -4144,6 +4228,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves DCL instruction preserves WF invariant. *)
 Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
 Proof.
   intros s HWF. unfold execute, WF in *.
@@ -4222,6 +4307,7 @@ Proof.
   - apply execute_DCL_WF; assumption.
 Qed.
 
+(** Proves execution preserves ROM byte bounds (all bytes < 256). *)
 Theorem memory_safety : forall s i, WF s -> instr_wf i -> Forall (fun b => b < 256) (rom (execute s i)).
 Proof.
   intros s i HWF Hwfi.
@@ -4465,29 +4551,37 @@ Theorem step_deterministic : forall s s1 s2,
   s1 = step s -> s2 = step s -> s1 = s2.
 Proof. congruence. Qed.
 
+(** Proves step function is deterministic (reflexive formulation). *)
 Theorem determinism : forall s, WF s -> step s = step s.
 Proof. intros. reflexivity. Qed.
 
+(** Proves NOP increments PC by 1. *)
 Lemma pc_shape_nop : forall s, pc (execute s NOP) = addr12_of_nat (pc s + 1).
 Proof. intros. unfold execute. unfold pc_inc1. reflexivity. Qed.
 
+(** Proves JUN sets PC to target address. *)
 Lemma pc_shape_jun : forall s a, pc (execute s (JUN a)) = a.
 Proof. intros. unfold execute. reflexivity. Qed.
 
+(** Proves JMS sets PC to target address. *)
 Lemma pc_shape_jms : forall s a, pc (execute s (JMS a)) = a.
 Proof. intros. unfold execute. reflexivity. Qed.
 
+(** Proves FIM increments PC by 2. *)
 Lemma pc_shape_fim : forall s r d, pc (execute s (FIM r d)) = addr12_of_nat (pc s + 2).
 Proof. intros. unfold execute. unfold pc_inc2. reflexivity. Qed.
 
+(** Proves page_base equals page number times 256. *)
 Lemma page_base_eq_page_times_256 : forall a,
   page_base a = page_of a * 256.
 Proof. intros. unfold page_base. reflexivity. Qed.
 
+(** Proves JIN sets PC within page of next instruction. *)
 Lemma pc_shape_jin : forall s r,
   pc (execute s (JIN r)) = addr12_of_nat (page_of (pc_inc1 s) * 256 + get_reg_pair s r mod 256).
 Proof. intros. unfold execute. reflexivity. Qed.
 
+(** Proves JIN PC stays within page range (offset < 256). *)
 Lemma jin_pc_in_page_range : forall s r,
   exists off, off < 256 /\ pc (execute s (JIN r)) = addr12_of_nat (page_base (pc_inc1 s) + off).
 Proof.
@@ -4497,6 +4591,7 @@ Proof.
   - rewrite pc_shape_jin. rewrite page_base_eq_page_times_256. reflexivity.
 Qed.
 
+(** Proves ISZ increments PC by 2 when register wraps to zero. *)
 Lemma pc_shape_isz_zero : forall s r off,
   nibble_of_nat (get_reg s r + 1) = 0 ->
   pc (execute s (ISZ r off)) = addr12_of_nat (pc s + 2).
@@ -4504,6 +4599,7 @@ Proof.
   intros. unfold execute. rewrite H. unfold pc_inc2. reflexivity.
 Qed.
 
+(** Proves ISZ branches when register does not wrap to zero. *)
 Lemma pc_shape_isz_nonzero : forall s r off,
   nibble_of_nat (get_reg s r + 1) <> 0 ->
   pc (execute s (ISZ r off)) = addr12_of_nat (page_base (pc_inc2 s) + off).
@@ -4514,16 +4610,19 @@ Proof.
   - reflexivity.
 Qed.
 
+(** Proves BBL returns to popped address when stack non-empty. *)
 Lemma pc_shape_bbl_some : forall s d addr s1,
   pop_stack s = (Some addr, s1) ->
   pc (execute s (BBL d)) = addr.
 Proof. intros. unfold execute. rewrite H. reflexivity. Qed.
 
+(** Proves BBL increments PC when stack empty. *)
 Lemma pc_shape_bbl_none : forall s d s1,
   pop_stack s = (None, s1) ->
   pc (execute s (BBL d)) = addr12_of_nat (pc s + 1).
 Proof. intros. unfold execute. rewrite H. unfold pc_inc1. reflexivity. Qed.
 
+(** Proves addresses popped from stack are bounded by 4096. *)
 Lemma stack_addr_bound : forall s addr s1,
   WF s ->
   pop_stack s = (Some addr, s1) ->
@@ -4539,6 +4638,7 @@ Proof.
     inversion Hstack_all; subst. assumption.
 Qed.
 
+(** Proves execute produces bounded PC in one of five forms. *)
 Lemma execute_pc_bounded : forall s i,
   instr_wf i ->
   WF s ->
@@ -4680,6 +4780,7 @@ Proof.
   - left. unfold execute, pc_inc1. reflexivity.
 Qed.
 
+(** Proves execute never produces arbitrary jumps (PC always < 4096). *)
 Theorem no_arbitrary_jumps : forall s i, WF s -> instr_wf i -> pc (execute s i) < 4096.
 Proof.
   intros s i HWF Hwfi.
@@ -4692,6 +4793,7 @@ Proof.
   - destruct H as [a [H Ha]]. rewrite H. exact Ha.
 Qed.
 
+(** Proves step produces PC in one of five bounded forms. *)
 Theorem step_pc_shape :
   forall s,
   WF s ->
@@ -4722,12 +4824,14 @@ Proof.
   - exact Hwf.
 Qed.
 
+(** Classifies whether instruction is a jump/branch. *)
 Definition is_jump (i:Instruction) : bool :=
   match i with
   | JCN _ _ | JUN _ | JMS _ | JIN _ | BBL _ | ISZ _ _ => true
   | _ => false
   end.
 
+(** Proves non-jump instructions produce monotonic PC (increment by 1 or 2). *)
 Corollary pc_monotonic_non_jump : forall s i,
   WF s ->
   instr_wf i ->
@@ -4743,6 +4847,7 @@ Qed.
 
 (* --- Frames (no unintended writes) --- *)
 
+(** Proves pop_stack preserves register file. *)
 Lemma pop_stack_preserves_regs : forall s opt s',
   pop_stack s = (opt, s') -> regs s' = regs s.
 Proof.
@@ -4753,18 +4858,21 @@ Proof.
   - inversion H; subst. reflexivity.
 Qed.
 
+(** Classifies instructions that write to register file. *)
 Definition writes_regs (i:Instruction) : bool :=
   match i with
   | XCH _ | INC _ | FIM _ _ | FIN _ | ISZ _ _ => true
   | _ => false
   end.
 
+(** Classifies instructions that write to RAM. *)
 Definition writes_ram (i:Instruction) : bool :=
   match i with
   | WRM | WMP | WR0 | WR1 | WR2 | WR3 => true
   | _ => false
   end.
 
+(** Proves execute preserves registers when instruction does not write them. *)
 Lemma execute_regs_frame : forall s i,
   writes_regs i = false ->
   regs (execute s i) = regs s.
@@ -4784,6 +4892,7 @@ Proof.
     + rewrite (pop_stack_preserves_regs s None s' Epop). reflexivity.
 Qed.
 
+(** Proves execute preserves RAM when instruction does not write it. *)
 Lemma execute_ram_frame : forall s i,
   writes_ram i = false ->
   ram_sys (execute s i) = ram_sys s.
@@ -4803,6 +4912,7 @@ Proof.
   - destruct (pop_stack s) as [[?|] ?]; reflexivity.
 Qed.
 
+(** Classifies instructions that write to accumulator. *)
 Definition writes_acc (i:Instruction) : bool :=
   match i with
   | LDM _ | LD _ | ADD _ | SUB _ | INC _ | XCH _ | BBL _
@@ -4811,6 +4921,7 @@ Definition writes_acc (i:Instruction) : bool :=
   | _ => false
   end.
 
+(** Proves execute preserves accumulator when instruction does not write it. *)
 Lemma execute_acc_frame : forall s i,
   writes_acc i = false ->
   acc (execute s i) = acc s.
@@ -4874,6 +4985,7 @@ Proof.
     exact H0.
 Qed.
 
+(** Proves get_reg_pair always produces byte-sized value (< 256). *)
 Lemma get_reg_pair_bound : forall s r,
   length (regs s) = 16 ->
   Forall (fun x => x < 16) (regs s) ->
@@ -4970,6 +5082,7 @@ Proof.
   unfold nibble_of_nat. rewrite Nat.mod_small by lia. reflexivity.
 Qed.
 
+(** Proves SRC+WRR roundtrip: selected ROM port receives accumulator value. *)
 Corollary src_wrr_rom_port_roundtrip : forall s r,
   WF s ->
   let v := acc s in
@@ -4985,6 +5098,7 @@ Proof.
   exact Hwf.
 Qed.
 
+(** Proves JMS+BBL roundtrip: PC returns to instruction after JMS. *)
 Lemma jms_bbl_roundtrip : forall s addr data,
   WF s ->
   length (stack s) <= 2 ->
@@ -5007,6 +5121,7 @@ Proof.
   - simpl in Hstack. lia.
 Qed.
 
+(** Proves n-step execution from init_state preserves WF. *)
 Corollary steps_from_init_WF : forall n, WF (steps n init_state).
 Proof.
   intros n. apply steps_preserve_WF. apply init_state_WF.
@@ -5016,6 +5131,7 @@ Qed.
 (*                         TIMING MODEL                                  *)
 (* ===================================================================== *)
 
+(** Defines cycle count for each instruction (8, 16, or 24 cycles). *)
 Definition cycles (s : Intel4004State) (i : Instruction) : nat :=
   match i with
   | NOP => 8
@@ -5041,6 +5157,7 @@ Definition cycles (s : Intel4004State) (i : Instruction) : nat :=
       if new_val =? 0 then 8 else 16
   end.
 
+(** Proves all instructions execute in at most 24 cycles. *)
 Lemma max_cycles_per_instruction : forall s i,
   cycles s i <= 24.
 Proof.
@@ -5055,6 +5172,7 @@ Proof.
   - destruct (nibble_of_nat (get_reg s n + 1) =? 0); lia.
 Qed.
 
+(** Proves all instructions execute in at least 8 cycles. *)
 Lemma min_cycles_per_instruction : forall s i,
   8 <= cycles s i.
 Proof.
@@ -5069,18 +5187,21 @@ Proof.
   - destruct (nibble_of_nat (get_reg s n + 1) =? 0); lia.
 Qed.
 
+(** Computes total cycles for executing a program (instruction list). *)
 Fixpoint program_cycles (s : Intel4004State) (prog : list Instruction) : nat :=
   match prog with
   | [] => 0
   | i :: rest => cycles s i + program_cycles (execute s i) rest
   end.
 
+(** Proves cycle count is deterministic (reflexive formulation). *)
 Theorem cycles_deterministic : forall s i,
   cycles s i = cycles s i.
 Proof.
   intros. reflexivity.
 Qed.
 
+(** Proves timing is invariant and execution preserves WF. *)
 Theorem timing_preserves_WF : forall s i,
   WF s -> instr_wf i ->
   cycles s i = cycles s i /\ WF (execute s i).
@@ -5095,12 +5216,14 @@ Qed.
 (*                    WPM PROM PROGRAMMING PROOFS                        *)
 (* ===================================================================== *)
 
+(** Sets PROM programming parameters (address, data, enable) in state. *)
 Definition set_prom_params (s : Intel4004State) (addr : addr12) (data : byte) (enable : bool) : Intel4004State :=
   mkState (acc s) (regs s) (carry s) (pc s) (stack s)
           (ram_sys s) (cur_bank s) (sel_ram s)
           (rom_ports s) (sel_rom s) (rom s) (test_pin s)
           addr data enable.
 
+(** Proves WPM writes exactly one ROM location when enabled. *)
 Theorem wpm_writes_exactly_once : forall s,
   WF s ->
   prom_enable s = true ->
@@ -5119,6 +5242,7 @@ Proof.
     exact Hneq.
 Qed.
 
+(** Proves WPM does not modify ROM when disabled. *)
 Theorem wpm_disabled_is_nop : forall s,
   prom_enable s = false ->
   rom (execute s WPM) = rom s.
@@ -5129,6 +5253,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Loads program bytes into ROM starting at base address using WPM. *)
 Fixpoint load_program (s : Intel4004State) (base : addr12) (bytes : list byte) : Intel4004State :=
   match bytes with
   | [] => s
@@ -5138,18 +5263,21 @@ Fixpoint load_program (s : Intel4004State) (base : addr12) (bytes : list byte) :
       load_program s'' (addr12_of_nat (base + 1)) rest
   end.
 
+(** Proves set_prom_params preserves register file. *)
 Lemma set_prom_preserves_regs : forall s addr data en,
   regs (set_prom_params s addr data en) = regs s.
 Proof.
   intros. unfold set_prom_params. simpl. reflexivity.
 Qed.
 
+(** Proves set_prom_params preserves RAM system. *)
 Lemma set_prom_preserves_ram : forall s addr data en,
   ram_sys (set_prom_params s addr data en) = ram_sys s.
 Proof.
   intros. unfold set_prom_params. simpl. reflexivity.
 Qed.
 
+(** Proves set_prom_params preserves WF when parameters are bounded. *)
 Lemma set_prom_preserves_WF : forall s addr data,
   WF s -> addr < 4096 -> data < 256 ->
   WF (set_prom_params s addr data true).
@@ -5177,6 +5305,7 @@ Proof.
   assumption.
 Qed.
 
+(** Proves WPM preserves registers when enabled. *)
 Lemma wpm_enabled_preserves_regs : forall s,
   prom_enable s = true ->
   regs (execute s WPM) = regs s.
@@ -5184,6 +5313,7 @@ Proof.
   intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
 Qed.
 
+(** Proves WPM preserves RAM when enabled. *)
 Lemma wpm_enabled_preserves_ram : forall s,
   prom_enable s = true ->
   ram_sys (execute s WPM) = ram_sys s.
@@ -5191,6 +5321,7 @@ Proof.
   intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
 Qed.
 
+(** Proves WPM updates ROM at prom_addr when enabled. *)
 Lemma wpm_enabled_updates_rom : forall s,
   prom_enable s = true ->
   rom (execute s WPM) = update_nth (prom_addr s) (prom_data s) (rom s).
@@ -5198,12 +5329,14 @@ Proof.
   intros s Hen. unfold execute. simpl. destruct (prom_enable s) eqn:E; [reflexivity | discriminate Hen].
 Qed.
 
+(** Proves loading empty program returns unchanged state. *)
 Lemma load_program_nil : forall s base,
   load_program s base [] = s.
 Proof.
   intros. simpl. reflexivity.
 Qed.
 
+(** Proves nth at updated index returns new value. *)
 Lemma update_nth_same_index : forall A (l : list A) n x d,
   n < length l ->
   nth n (update_nth n x l) d = x.
@@ -5213,6 +5346,7 @@ Proof.
   exact Hn.
 Qed.
 
+(** Proves nth at different index returns original value. *)
 Lemma update_nth_diff_index : forall A (l : list A) n m x d,
   n <> m ->
   nth n (update_nth m x l) d = nth n l d.
@@ -5222,6 +5356,7 @@ Proof.
   exact Hneq.
 Qed.
 
+(** Proves load_program cons unfolds to single WPM step plus recursive load. *)
 Lemma load_program_cons_rom : forall s b rest base,
   WF s ->
   prom_enable (set_prom_params s base b true) = true ->
@@ -5234,12 +5369,14 @@ Proof.
   simpl. reflexivity.
 Qed.
 
+(** Proves set_prom_params with true sets prom_enable to true. *)
 Lemma set_prom_enable_true : forall s addr data,
   prom_enable (set_prom_params s addr data true) = true.
 Proof.
   intros. unfold set_prom_params. simpl. reflexivity.
 Qed.
 
+(** Proves WPM preserves ROM length. *)
 Lemma wpm_step_rom_length : forall s,
   WF s ->
   prom_enable s = true ->
@@ -5250,12 +5387,14 @@ Proof.
   apply update_nth_length.
 Qed.
 
+(** Proves set_prom_params preserves ROM length. *)
 Lemma set_prom_preserves_rom_length : forall s addr data en,
   length (rom (set_prom_params s addr data en)) = length (rom s).
 Proof.
   intros. unfold set_prom_params. simpl. reflexivity.
 Qed.
 
+(** Proves single load_program step preserves WF. *)
 Lemma load_program_step_preserves_WF : forall s base b,
   WF s -> base < 4096 -> b < 256 ->
   WF (execute (set_prom_params s base b true) WPM).
@@ -5265,6 +5404,7 @@ Proof.
   apply set_prom_preserves_WF; assumption.
 Qed.
 
+(** Proves single load_program step preserves ROM length. *)
 Lemma load_program_step_rom_length : forall s base b,
   WF s -> base < 4096 -> b < 256 ->
   length (rom (execute (set_prom_params s base b true) WPM)) = length (rom s).
@@ -5276,6 +5416,7 @@ Proof.
   - apply set_prom_enable_true.
 Qed.
 
+(** Proves single load_program step preserves ROM length (weak version without base bound). *)
 Lemma load_program_step_rom_length_weak : forall s base b,
   WF s -> b < 256 ->
   length (rom (execute (set_prom_params s base b true) WPM)) = length (rom s).
@@ -5285,6 +5426,7 @@ Proof.
   rewrite update_nth_length. reflexivity.
 Qed.
 
+(** Proves set_prom then WPM preserves register file length. *)
 Lemma set_prom_then_wpm_preserves_regs_length : forall s base b,
   length (regs s) = 16 ->
   length (regs (execute (set_prom_params s base b true) WPM)) = 16.
@@ -5292,6 +5434,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves Forall on registers. *)
 Lemma set_prom_then_wpm_preserves_regs_forall : forall s base b,
   Forall (fun x => x < 16) (regs s) ->
   Forall (fun x => x < 16) (regs (execute (set_prom_params s base b true) WPM)).
@@ -5299,6 +5442,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves accumulator bound. *)
 Lemma set_prom_then_wpm_preserves_acc_bound : forall s base b,
   acc s < 16 ->
   acc (execute (set_prom_params s base b true) WPM) < 16.
@@ -5306,12 +5450,14 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM produces bounded PC. *)
 Lemma set_prom_then_wpm_pc_bound : forall s base b,
   pc (execute (set_prom_params s base b true) WPM) < 4096.
 Proof.
   intros. unfold execute, set_prom_params. simpl. apply addr12_bound.
 Qed.
 
+(** Proves set_prom then WPM preserves stack length bound. *)
 Lemma set_prom_then_wpm_preserves_stack_length : forall s base b,
   length (stack s) <= 3 ->
   length (stack (execute (set_prom_params s base b true) WPM)) <= 3.
@@ -5319,6 +5465,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves Forall on stack. *)
 Lemma set_prom_then_wpm_preserves_stack_forall : forall s base b,
   Forall (fun a => a < 4096) (stack s) ->
   Forall (fun a => a < 4096) (stack (execute (set_prom_params s base b true) WPM)).
@@ -5326,6 +5473,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves RAM system length. *)
 Lemma set_prom_then_wpm_preserves_ram_length : forall s base b,
   length (ram_sys s) = NBANKS ->
   length (ram_sys (execute (set_prom_params s base b true) WPM)) = NBANKS.
@@ -5333,6 +5481,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves Forall WF_bank on RAM. *)
 Lemma set_prom_then_wpm_preserves_ram_forall : forall s base b,
   Forall WF_bank (ram_sys s) ->
   Forall WF_bank (ram_sys (execute (set_prom_params s base b true) WPM)).
@@ -5340,6 +5489,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves current bank bound. *)
 Lemma set_prom_then_wpm_preserves_bank_bound : forall s base b,
   cur_bank s < NBANKS ->
   cur_bank (execute (set_prom_params s base b true) WPM) < NBANKS.
@@ -5347,6 +5497,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves WF_sel on RAM selector. *)
 Lemma set_prom_then_wpm_preserves_sel_wf : forall s base b,
   WF_sel (sel_ram s) ->
   WF_sel (sel_ram (execute (set_prom_params s base b true) WPM)).
@@ -5354,6 +5505,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves ROM ports length. *)
 Lemma set_prom_then_wpm_preserves_rom_ports_length : forall s base b,
   length (rom_ports s) = 16 ->
   length (rom_ports (execute (set_prom_params s base b true) WPM)) = 16.
@@ -5361,6 +5513,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves Forall on ROM ports. *)
 Lemma set_prom_then_wpm_preserves_rom_ports_forall : forall s base b,
   Forall (fun x => x < 16) (rom_ports s) ->
   Forall (fun x => x < 16) (rom_ports (execute (set_prom_params s base b true) WPM)).
@@ -5368,6 +5521,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves selected ROM bound. *)
 Lemma set_prom_then_wpm_preserves_sel_rom_bound : forall s base b,
   sel_rom s < 16 ->
   sel_rom (execute (set_prom_params s base b true) WPM) < 16.
@@ -5375,6 +5529,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves Forall on ROM bytes. *)
 Lemma set_prom_then_wpm_rom_forall : forall s base b,
   WF s -> b < 256 ->
   Forall (fun x => x < 256) (rom (execute (set_prom_params s base b true) WPM)).
@@ -5385,6 +5540,7 @@ Proof.
   apply Forall_update_nth; assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves ROM length (4096). *)
 Lemma set_prom_then_wpm_rom_length : forall s base b,
   length (rom s) = 4096 ->
   length (rom (execute (set_prom_params s base b true) WPM)) = 4096.
@@ -5393,6 +5549,7 @@ Proof.
   rewrite update_nth_length. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves prom_addr bound. *)
 Lemma set_prom_then_wpm_prom_addr_bound : forall s base b,
   base < 4096 ->
   prom_addr (execute (set_prom_params s base b true) WPM) < 4096.
@@ -5400,6 +5557,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves set_prom then WPM preserves prom_data bound. *)
 Lemma set_prom_then_wpm_prom_data_bound : forall s base b,
   b < 256 ->
   prom_data (execute (set_prom_params s base b true) WPM) < 256.
@@ -5407,6 +5565,7 @@ Proof.
   intros. unfold execute, set_prom_params. simpl. assumption.
 Qed.
 
+(** Proves single load_program step preserves WF (simplified version). *)
 Lemma load_program_step_preserves_WF_simple : forall s base b,
   WF s -> base < 4096 -> b < 256 ->
   WF (execute (set_prom_params s base b true) WPM).
@@ -5483,6 +5642,42 @@ Proof.
       exact H1.
     + apply addr12_bound.
     + assumption.
+Qed.
+
+Lemma wpm_updates_rom_at_addr : forall s addr data,
+  WF s ->
+  prom_enable s = true ->
+  prom_addr s = addr ->
+  prom_data s = data ->
+  addr < 4096 ->
+  data < 256 ->
+  nth addr (rom (execute s WPM)) 0 = data.
+Proof.
+  intros s addr data HWF Hen Hpaddr Hpdata Haddr Hdata.
+  rewrite wpm_enabled_updates_rom by assumption.
+  rewrite Hpaddr, Hpdata.
+  apply nth_update_nth_eq.
+  unfold WF in HWF.
+  destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [HromLen _]]]]]]]]]]]]]]].
+  rewrite HromLen. exact Haddr.
+Qed.
+
+Lemma load_program_step_writes_at_base : forall s b base,
+  WF s ->
+  base < 4096 ->
+  b < 256 ->
+  let s' := set_prom_params s base b true in
+  let s'' := execute s' WPM in
+  nth base (rom s'') 0 = b.
+Proof.
+Admitted.
+
+Lemma nth_update_nth_above : forall A (l : list A) n m x d,
+  m < n ->
+  nth m (update_nth n x l) d = nth m l d.
+Proof.
+  intros A l n m x d Hlt.
+  apply nth_update_nth_neq. lia.
 Qed.
 
 Theorem load_then_fetch : forall s base bytes,
