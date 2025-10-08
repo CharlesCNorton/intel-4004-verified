@@ -6757,6 +6757,33 @@ Proof.
   - simpl; reflexivity.
 Qed.
 
+Lemma hoare_LDM_exact : forall n,
+  n < 16 ->
+  {{ fun _ => True }}
+     LDM n
+  {{ fun s => acc s = n }}.
+Proof.
+  intros n Hn. unfold hoare_triple. intros s HWF _.
+  split.
+  - apply execute_LDM_WF; auto.
+  - unfold execute. simpl. unfold nibble_of_nat.
+    rewrite Nat.mod_small by exact Hn. reflexivity.
+Qed.
+
+Lemma hoare_LDM_frame : forall n r v,
+  n < 16 ->
+  {{ fun s => get_reg s r = v }}
+     LDM n
+  {{ fun s => acc s = n /\ get_reg s r = v }}.
+Proof.
+  intros n r v Hn. unfold hoare_triple. intros s HWF Hreg.
+  split.
+  - apply execute_LDM_WF; auto.
+  - unfold execute. simpl. split.
+    + unfold nibble_of_nat. rewrite Nat.mod_small by exact Hn. reflexivity.
+    + exact Hreg.
+Qed.
+
 Lemma hoare_LD : forall r old_r,
   {{ fun s => get_reg s r = old_r /\ r < 16 }}
      LD r
@@ -6766,6 +6793,29 @@ Proof.
   split.
   - apply execute_LD_WF. exact HWF. unfold instr_wf. exact Hr.
   - unfold execute. simpl. exact Hold.
+Qed.
+
+Lemma hoare_LD_load : forall r v,
+  {{ fun s => get_reg s r = v /\ r < 16 }}
+     LD r
+  {{ fun s => acc s = v }}.
+Proof.
+  intros r v. unfold hoare_triple. intros s HWF [Hreg Hr].
+  split.
+  - apply execute_LD_WF; auto.
+  - unfold execute. simpl. exact Hreg.
+Qed.
+
+Lemma hoare_LD_frame : forall r1 r2 v1 v2,
+  r1 <> r2 ->
+  {{ fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ r1 < 16 }}
+     LD r1
+  {{ fun s => acc s = v1 /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 }}.
+Proof.
+  intros r1 r2 v1 v2 Hneq. unfold hoare_triple. intros s HWF [Hr1 [Hr2 Hbound]].
+  split.
+  - apply execute_LD_WF; auto.
+  - unfold execute. simpl. split; [exact Hr1 | split; [exact Hr1 | exact Hr2]].
 Qed.
 
 Lemma hoare_CLB :
@@ -6822,6 +6872,39 @@ Proof.
   split.
   - apply execute_CMA_WF. exact HWF.
   - unfold execute. simpl. apply nibble_lt16.
+Qed.
+
+Lemma hoare_CMA_involution : forall a,
+  {{ fun s => acc s = a /\ a < 16 }}
+     CMA
+  {{ fun s => acc s = 15 - a }}.
+Proof.
+  intros a. unfold hoare_triple. intros s HWF [Hacc Ha].
+  split.
+  - apply execute_CMA_WF. exact HWF.
+  - unfold execute. simpl. rewrite Hacc.
+    do 16 (destruct a; simpl; [reflexivity|]); lia.
+Qed.
+
+Lemma hoare_CMA_double_involution : forall a r v,
+  {{ fun s => acc s = a /\ a < 16 /\ get_reg s r = v }}
+     CMA
+  {{ fun s => acc s = 15 - a /\ get_reg s r = v }}.
+Proof.
+  intros a r v. unfold hoare_triple. intros s HWF [Hacc [Ha Hreg]].
+  split.
+  - apply execute_CMA_WF. exact HWF.
+  - unfold execute. simpl. split.
+    + rewrite Hacc. do 16 (destruct a; simpl; [reflexivity|]); lia.
+    + exact Hreg.
+Qed.
+
+Lemma hoare_CMA_involution_proof : forall a,
+  a < 16 ->
+  15 - (15 - a) = a.
+Proof.
+  intros a Ha.
+  do 16 (destruct a; simpl; [reflexivity|]); lia.
 Qed.
 
 Lemma hoare_IAC :
@@ -6929,6 +7012,73 @@ Proof.
     apply nibble_lt16.
 Qed.
 
+Lemma hoare_INC_from_zero : forall r,
+  {{ fun s => get_reg s r = 0 /\ r < 16 }}
+     INC r
+  {{ fun s => get_reg s r = 1 }}.
+Proof.
+  intros r. unfold hoare_triple. intros s HWF [Hreg Hr].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR _].
+  split.
+  - apply execute_INC_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg. simpl.
+    rewrite nth_update_nth_eq by (rewrite HlenR; exact Hr).
+    unfold nibble_of_nat. unfold get_reg in Hreg. rewrite Hreg. simpl. reflexivity.
+Qed.
+
+Lemma hoare_INC_from_zero_frame : forall r r2 v2 acc_val,
+  r <> r2 ->
+  {{ fun s => get_reg s r = 0 /\ r < 16 /\ get_reg s r2 = v2 /\ acc s = acc_val }}
+     INC r
+  {{ fun s => get_reg s r = 1 /\ get_reg s r2 = v2 /\ acc s = acc_val }}.
+Proof.
+  intros r r2 v2 acc_val Hneq. unfold hoare_triple. intros s HWF [Hreg [Hr [Hr2 Hacc]]].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR _].
+  split.
+  - apply execute_INC_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg in *. simpl.
+    split; [|split].
+    + rewrite nth_update_nth_eq by (rewrite HlenR; exact Hr).
+      unfold nibble_of_nat. rewrite Hreg. simpl. reflexivity.
+    + rewrite nth_update_nth_neq by lia. exact Hr2.
+    + exact Hacc.
+Qed.
+
+Lemma hoare_INC_preserves_other_regs : forall r1 r2 v,
+  r1 <> r2 ->
+  {{ fun s => get_reg s r2 = v /\ r1 < 16 }}
+     INC r1
+  {{ fun s => get_reg s r2 = v }}.
+Proof.
+  intros r1 r2 v Hneq. unfold hoare_triple. intros s HWF [Hreg Hr1].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR _].
+  split.
+  - apply execute_INC_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg in *. simpl.
+    rewrite nth_update_nth_neq by lia. exact Hreg.
+Qed.
+
+Lemma hoare_INC_full_frame : forall r1 r2 v1 v2,
+  r1 <> r2 ->
+  {{ fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ r1 < 16 /\ v1 < 16 }}
+     INC r1
+  {{ fun s => get_reg s r1 < 16 /\ get_reg s r2 = v2 }}.
+Proof.
+  intros r1 r2 v1 v2 Hneq. unfold hoare_triple. intros s HWF [Hr1 [Hr2 [Hbound Hv1]]].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR _].
+  split.
+  - apply execute_INC_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg in *. simpl.
+    split.
+    + rewrite nth_update_nth_eq by (rewrite HlenR; exact Hbound).
+      apply nibble_lt16.
+    + rewrite nth_update_nth_neq by lia. exact Hr2.
+Qed.
+
 Lemma hoare_ADD : forall r,
   {{ fun s => r < length (regs s) /\ acc s < 16 /\ get_reg s r < 16 }}
      ADD r
@@ -6939,6 +7089,19 @@ Proof.
   - apply execute_ADD_WF; auto. unfold instr_wf.
     destruct HWF as [HlenR _]. lia.
   - apply nibble_lt16.
+Qed.
+
+Lemma hoare_ADD_zero : forall r v,
+  {{ fun s => acc s = v /\ get_reg s r = 0 /\ carry s = false /\ r < 16 /\ v < 16 }}
+     ADD r
+  {{ fun s => acc s = v }}.
+Proof.
+  intros r v. unfold hoare_triple. intros s HWF [Hacc [Hreg [Hcarry [Hr Hv]]]].
+  split.
+  - apply execute_ADD_WF; auto.
+  - unfold execute, get_reg in *. simpl. rewrite Hacc, Hreg, Hcarry. simpl.
+    unfold nibble_of_nat. rewrite Nat.add_0_r.
+    rewrite Nat.mod_small by lia. lia.
 Qed.
 
 Lemma hoare_SUB : forall r,
@@ -6972,6 +7135,24 @@ Proof.
   unfold nibble_of_nat. rewrite Nat.mod_small by assumption. exact Hacc.
 Qed.
 
+Lemma hoare_XCH_preserves_sum : forall r n,
+  {{ fun s => acc s + get_reg s r = n /\ r < 16 }}
+     XCH r
+  {{ fun s => acc s + get_reg s r = n }}.
+Proof.
+  intros r n. unfold hoare_triple. intros s HWF [Hsum Hr].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR [HforR [Hacc_bound _]]].
+  split.
+  - apply execute_XCH_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg in *. simpl.
+    assert (Hlen_r: r < length (regs s)) by (rewrite HlenR; exact Hr).
+    rewrite nth_update_nth_eq by exact Hlen_r.
+    unfold nibble_of_nat.
+    rewrite Nat.mod_small by exact Hacc_bound.
+    lia.
+Qed.
+
 (* ==================== Control Flow =============================== *)
 
 Lemma hoare_NOP :
@@ -6983,6 +7164,28 @@ Proof.
   split.
   - apply execute_NOP_WF. exact HWF.
   - exact I.
+Qed.
+
+Lemma hoare_NOP_preserves_acc : forall v,
+  {{ fun s => acc s = v }}
+     NOP
+  {{ fun s => acc s = v }}.
+Proof.
+  intros v. unfold hoare_triple. intros s HWF Hacc.
+  split.
+  - apply execute_NOP_WF. exact HWF.
+  - unfold execute. simpl. exact Hacc.
+Qed.
+
+Lemma hoare_NOP_preserves_regs : forall r v,
+  {{ fun s => get_reg s r = v }}
+     NOP
+  {{ fun s => get_reg s r = v }}.
+Proof.
+  intros r v. unfold hoare_triple. intros s HWF Hreg.
+  split.
+  - apply execute_NOP_WF. exact HWF.
+  - unfold execute. simpl. exact Hreg.
 Qed.
 
 Lemma hoare_JUN : forall addr,
