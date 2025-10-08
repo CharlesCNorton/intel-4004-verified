@@ -5670,7 +5670,16 @@ Lemma load_program_step_writes_at_base : forall s b base,
   let s'' := execute s' WPM in
   nth base (rom s'') 0 = b.
 Proof.
-Admitted.
+  intros s b base HWF Hbase Hb s' s''.
+  subst s' s''.
+  apply wpm_updates_rom_at_addr.
+  - apply set_prom_preserves_WF; assumption.
+  - apply set_prom_enable_true.
+  - unfold set_prom_params. simpl. reflexivity.
+  - unfold set_prom_params. simpl. reflexivity.
+  - exact Hbase.
+  - exact Hb.
+Qed.
 
 Lemma nth_update_nth_above : forall A (l : list A) n m x d,
   m < n ->
@@ -5678,6 +5687,163 @@ Lemma nth_update_nth_above : forall A (l : list A) n m x d,
 Proof.
   intros A l n m x d Hlt.
   apply nth_update_nth_neq. lia.
+Qed.
+
+Lemma load_program_step_rom_update : forall s b base,
+  WF s ->
+  base < 4096 ->
+  b < 256 ->
+  rom (execute (set_prom_params s base b true) WPM) =
+    update_nth base b (rom s).
+Proof.
+  intros s b base HWF Hbase Hb.
+  unfold execute, set_prom_params. simpl.
+  reflexivity.
+Qed.
+
+(** Helper 1: Single WPM step preserves disjoint addresses *)
+Lemma wpm_step_preserves_disjoint : forall s base b addr,
+  WF s ->
+  base < 4096 ->
+  b < 256 ->
+  addr <> base ->
+  nth addr (rom (execute (set_prom_params s base b true) WPM)) 0 =
+  nth addr (rom s) 0.
+Proof.
+  intros s base b addr HWF Hbase Hb Hneq.
+  rewrite load_program_step_rom_update by assumption.
+  apply nth_update_nth_neq.
+  exact Hneq.
+Qed.
+
+(** Helper 2: load_program on empty list is identity for ROM *)
+Lemma load_program_nil_rom : forall s base,
+  rom (load_program s base []) = rom s.
+Proof.
+  intros s base.
+  simpl.
+  reflexivity.
+Qed.
+
+(** Helper 3: Disjoint address is outside single write *)
+Lemma addr_disjoint_from_base : forall base (bytes : list byte) addr,
+  (addr < base \/ base + length bytes <= addr) ->
+  length bytes > 0 ->
+  addr <> base.
+Proof.
+  intros base bytes addr Hdisj Hlen.
+  destruct Hdisj as [Hlt | Hge].
+  - lia.
+  - destruct bytes as [|b rest]; simpl in *.
+    + lia.
+    + lia.
+Qed.
+
+(** Helper 4: Disjoint range shifts for recursive case *)
+Lemma disjoint_range_shift : forall base addr (rest : list byte),
+  (addr < base \/ base + S (length rest) <= addr) ->
+  addr <> base ->
+  (addr < base + 1 \/ base + 1 + length rest <= addr).
+Proof.
+  intros base addr rest Hdisj Hneq.
+  destruct Hdisj as [Hlt | Hge].
+  - left. lia.
+  - right. lia.
+Qed.
+
+Lemma load_program_writes_disjoint : forall bytes s base addr,
+  WF s ->
+  base + length bytes <= 4096 ->
+  Forall (fun b => b < 256) bytes ->
+  (addr < base \/ base + length bytes <= addr) ->
+  nth addr (rom (load_program s base bytes)) 0 = nth addr (rom s) 0.
+Proof.
+  induction bytes as [|b rest IH]; intros s base addr HWF Hbound Hforall Hdisj.
+
+  (* Base case: empty list *)
+  - rewrite load_program_nil_rom.
+    reflexivity.
+
+  (* Inductive case: b :: rest *)
+  - simpl load_program.
+    inversion Hforall as [|? ? Hb Hrest]; subst.
+
+    (* Apply IH to recursive call *)
+    rewrite IH.
+
+    + (* Show single WPM step preserves addr *)
+      apply wpm_step_preserves_disjoint.
+      * exact HWF.
+      * simpl in Hbound. lia.
+      * exact Hb.
+      * destruct Hdisj as [Hlt | Hge]; intro Heq; subst; try (simpl in Hge); lia.
+
+    + (* WF after one step *)
+      apply load_program_step_preserves_WF; auto.
+      simpl in Hbound. lia.
+
+    + (* Bound for recursive call *)
+      simpl in Hbound.
+      unfold addr12_of_nat.
+      assert (Hbase1: base + 1 <= 4096).
+      { assert (1 <= S (length rest)) by lia.
+        assert (base + 1 <= base + S (length rest)) by lia.
+        lia. }
+      assert (Hbase1': base + 1 < 4096 \/ base + 1 = 4096) by lia.
+      destruct Hbase1' as [Hbase1' | Hbase1'].
+      * rewrite Nat.mod_small by assumption. lia.
+      * assert (base = 4095) by lia.
+        subst base.
+        assert (S (length rest) = 1) by lia.
+        assert (length rest = 0) by lia.
+        subst.
+        simpl.
+        lia.
+    + (* Forall for rest *)
+      exact Hrest.
+
+    + (* Disjoint range shifts *)
+      simpl in Hdisj.
+      assert (Hneq: addr <> base).
+      { destruct Hdisj as [Hlt | Hge]; intro Heq; subst; try (simpl in Hge); lia. }
+      pose proof (disjoint_range_shift base addr rest Hdisj Hneq) as Hshift.
+      unfold addr12_of_nat.
+      assert (Hbase1_le: base + 1 <= 4096).
+      { assert (1 <= S (length rest)) by lia.
+        simpl in Hbound.
+        lia. }
+      assert (Hbase1: base + 1 < 4096 \/ base + 1 = 4096) by lia.
+      destruct Hbase1 as [Hbase1 | Hbase1].
+      * rewrite Nat.mod_small by assumption. exact Hshift.
+      * assert (base = 4095) by lia.
+        assert (Hrest0: S (length rest) = 1) by (simpl in Hbound; lia).
+        assert (length rest = 0) by lia.
+        subst.
+        simpl.
+        right.
+        lia.
+Qed.
+
+Lemma load_program_addr_bound : forall bytes s base i,
+  WF s ->
+  base + length bytes <= 4096 ->
+  Forall (fun b => b < 256) bytes ->
+  i < length bytes ->
+  base + i < 4096.
+Proof.
+  intros bytes s base i HWF Hbound Hforall Hi.
+  lia.
+Qed.
+
+Corollary load_program_preserves_other_rom : forall bytes s base1 base2,
+  WF s ->
+  base1 + length bytes <= 4096 ->
+  Forall (fun b => b < 256) bytes ->
+  (base2 < base1 \/ base1 + length bytes <= base2) ->
+  nth base2 (rom (load_program s base1 bytes)) 0 = nth base2 (rom s) 0.
+Proof.
+  intros bytes s base1 base2 HWF Hbound Hforall Hdisj.
+  apply load_program_writes_disjoint; auto.
 Qed.
 
 Theorem load_then_fetch : forall s base bytes,
