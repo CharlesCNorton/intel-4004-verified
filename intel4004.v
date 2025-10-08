@@ -5846,6 +5846,33 @@ Proof.
   apply load_program_writes_disjoint; auto.
 Qed.
 
+Lemma load_program_step_read : forall s base b rest,
+  WF s ->
+  base + S (length rest) <= 4096 ->
+  b < 256 ->
+  Forall (fun x => x < 256) rest ->
+  nth base (rom (load_program (execute (set_prom_params s base b true) WPM) (addr12_of_nat (base + 1)) rest)) 0 = b.
+Proof.
+  intros s base b rest HWF Hbound Hb Hrest.
+  set (s1 := execute (set_prom_params s base b true) WPM).
+  assert (Hwr: nth base (rom s1) 0 = b).
+  { unfold s1. apply load_program_step_writes_at_base; auto. lia. }
+  destruct rest as [|b2 rest'].
+  - simpl. exact Hwr.
+  - simpl in Hbound.
+    inversion Hrest as [|? ? Hb2 Hrest'].
+    assert (Hbase1: base + 1 < 4096) by lia.
+    assert (Hbase_addr: addr12_of_nat (base + 1) = base + 1).
+    { unfold addr12_of_nat. rewrite Nat.mod_small by lia. reflexivity. }
+    rewrite Hbase_addr.
+    rewrite load_program_writes_disjoint.
+    + exact Hwr.
+    + unfold s1. apply load_program_step_preserves_WF; auto. lia.
+    + simpl. lia.
+    + constructor; assumption.
+    + left. lia.
+Qed.
+
 Theorem load_then_fetch : forall s base bytes,
   WF s ->
   base + length bytes <= 4096 ->
