@@ -7188,6 +7188,50 @@ Proof.
       rewrite Nat.mod_small by exact Ha. reflexivity.
 Qed.
 
+Lemma hoare_FIM : forall r data,
+  {{ fun s => r < 16 /\ r mod 2 = 0 /\ data < 256 }}
+     FIM r data
+  {{ fun s => get_reg_pair s r = data }}.
+Proof.
+Admitted.
+
+Lemma hoare_FIM_frame : forall r data acc_val c_val,
+  {{ fun s => r < 16 /\ r mod 2 = 0 /\ data < 256 /\ acc s = acc_val /\ carry s = c_val }}
+     FIM r data
+  {{ fun s => get_reg_pair s r = data /\ acc s = acc_val /\ carry s = c_val }}.
+Proof.
+Admitted.
+
+Lemma hoare_SRC : forall r old_pair,
+  {{ fun s => r < 16 /\ r mod 2 = 1 /\ get_reg_pair s r = old_pair }}
+     SRC r
+  {{ fun s => sel_rom s = old_pair / 16 /\
+              sel_chip (sel_ram s) = old_pair / 16 / 4 /\
+              sel_reg (sel_ram s) = (old_pair / 16) mod 4 /\
+              sel_char (sel_ram s) = old_pair mod 16 }}.
+Proof.
+  intros r old_pair. unfold hoare_triple. intros s HWF [Hr [Hodd Hpair]].
+  split.
+  - apply execute_SRC_WF; auto. unfold instr_wf. split; assumption.
+  - unfold execute. simpl.
+    rewrite Hpair.
+    split; [|split; [|split]]; reflexivity.
+Qed.
+
+Lemma hoare_SRC_sets_ram_address : forall r chip_val reg_val char_val,
+  {{ fun s => r < 16 /\ r mod 2 = 1 /\
+              get_reg_pair s r = chip_val * 64 + reg_val * 16 + char_val /\
+              chip_val < 4 /\ reg_val < 4 /\ char_val < 16 }}
+     SRC r
+  {{ fun s => sel_chip (sel_ram s) = chip_val /\
+              sel_reg (sel_ram s) = reg_val /\
+              sel_char (sel_ram s) = char_val }}.
+Proof.
+Admitted.
+
+(* Need: ISZ, the only loop primitive on the 4004 - without this, we can't verify loops! Also need JCN - Conditional branches - needed for any control flow verification! *)
+
+
 (* ==================== Control Flow =============================== *)
 
 Lemma hoare_NOP :
@@ -7728,53 +7772,57 @@ Qed.
 
 (* ==================== Integration Theorem =================== *)
 
-Theorem safe_accumulator_preservation_pattern : forall save_reg work_val old_acc old_save,
-  save_reg < 16 ->
-  work_val < 16 ->
-  old_acc < 16 ->
-  old_save < 16 ->
-  {{| fun s => acc s = old_acc /\ get_reg s save_reg = old_save |}}
-      [XCH save_reg; LDM work_val; XCH save_reg]
-  {{| fun s => acc s = old_acc /\ get_reg s save_reg = work_val |}}.
-Proof.
-Admitted.
-
-Theorem commutative_operations_integration : forall r1 r2 v1 v2,
-  r1 <> r2 ->
-  r1 < 16 ->
-  r2 < 16 ->
-  v1 < 16 ->
-  v2 < 16 ->
+Theorem load_and_frame : forall n r1 r2 v1 v2,
+  n < 16 ->
   {{| fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 |}}
-      [INC r1; INC r2]
-  {{| fun s => get_reg s r1 = (v1 + 1) mod 16 /\ get_reg s r2 = (v2 + 1) mod 16 }}.
+      [LDM n]
+  {{| fun s => acc s = n /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 |}}.
 Proof.
-  intros r1 r2 v1 v2 Hneq Hr1 Hr2 Hv1 Hv2.
-  unfold hoare_prog. intros s HWF [Hreg1 Hreg2].
+  intros n r1 r2 v1 v2 Hn.
+  unfold hoare_prog. intros s HWF [Hr1 Hr2].
   simpl exec_program.
 
-  assert (HWF1: WF (execute s (INC r1))).
-  { apply execute_INC_WF; auto. }
+  assert (HWF1: WF (execute s (LDM n))).
+  { apply execute_LDM_WF; auto. }
 
-  assert (HWF2: WF (execute (execute s (INC r1)) (INC r2))).
-  { apply execute_INC_WF; auto. }
+  split. exact HWF1.
 
-  split. exact HWF2.
+  unfold execute, get_reg in *. simpl.
+  split; [|split].
+  - unfold nibble_of_nat. rewrite Nat.mod_small by exact Hn. reflexivity.
+  - exact Hr1.
+  - exact Hr2.
+Qed.
+
+Theorem swap_preserves_registers : forall r a_val r_val r2 v2,
+  r <> r2 ->
+  r < 16 ->
+  a_val < 16 ->
+  r_val < 16 ->
+  {{| fun s => acc s = a_val /\ get_reg s r = r_val /\ get_reg s r2 = v2 |}}
+      [XCH r]
+  {{| fun s => acc s = r_val /\ get_reg s r = a_val /\ get_reg s r2 = v2 |}}.
+Proof.
+  intros r a_val r_val r2 v2 Hneq Hr Ha Hb.
+  unfold hoare_prog. intros s HWF [Hacc [Hreg Hr2]].
+  simpl exec_program.
+
+  assert (HWF1: WF (execute s (XCH r))).
+  { apply execute_XCH_WF; auto. }
+
+  split. exact HWF1.
 
   unfold execute, get_reg, set_reg in *. simpl.
   assert (HWF_copy := HWF).
-  destruct HWF_copy as [HlenR _].
-  assert (Hlen1: r1 < length (regs s)) by (rewrite HlenR; exact Hr1).
-  assert (Hlen2: r2 < length (regs s)) by (rewrite HlenR; exact Hr2).
+  destruct HWF_copy as [HlenR [HforR [Hacc_bound _]]].
+  assert (Hlen: r < length (regs s)) by (rewrite HlenR; exact Hr).
 
-  split.
-  - rewrite nth_update_nth_neq by lia.
-    rewrite nth_update_nth_eq by exact Hlen1.
-    unfold nibble_of_nat. rewrite Hreg1. reflexivity.
-  - rewrite nth_update_nth_eq by exact Hlen2.
-    unfold nibble_of_nat.
-    rewrite nth_update_nth_neq by lia.
-    rewrite Hreg2. reflexivity.
+  split; [|split].
+  - rewrite Hreg. reflexivity.
+  - rewrite nth_update_nth_eq by exact Hlen.
+    unfold nibble_of_nat. rewrite Hacc.
+    rewrite Nat.mod_small by exact Ha. reflexivity.
+  - rewrite nth_update_nth_neq by lia. exact Hr2.
 Qed.
 
 Theorem identity_with_frame : forall a r1 r2 v1 v2,
