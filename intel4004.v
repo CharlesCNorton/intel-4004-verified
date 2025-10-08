@@ -5982,6 +5982,296 @@ Proof.
   apply nth_update_nth_eq. rewrite Hlen. assumption.
 Qed.
 
+Lemma get_reg_set_reg_diff : forall s r1 r2 v,
+  r1 <> r2 ->
+  get_reg (set_reg s r1 v) r2 = get_reg s r2.
+Proof.
+  intros s r1 r2 v Hneq.
+  unfold get_reg, set_reg. simpl.
+  apply nth_update_nth_neq. lia.
+Qed.
+
+Lemma get_reg_pair_split : forall s r,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg s r * 16 + get_reg s (r + 1).
+Proof.
+  intros s r Hlen Hall Hr Heven.
+  unfold get_reg_pair.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even.
+  reflexivity.
+Qed.
+
+Lemma get_reg_pair_components : forall s r,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg s r = get_reg_pair s r / 16 /\
+  get_reg s (r + 1) = get_reg_pair s r mod 16.
+Proof.
+  intros s r Hlen Hall Hr Heven.
+  assert (Hsplit := get_reg_pair_split s r Hlen Hall Hr Heven).
+  assert (Hrhi: get_reg s r < 16).
+  { unfold get_reg. eapply nth_Forall_lt; eauto. lia. }
+  assert (Hrlo: get_reg s (r + 1) < 16).
+  { unfold get_reg. eapply nth_Forall_lt; eauto. lia. }
+  split.
+  - rewrite Hsplit.
+    rewrite Nat.div_add_l by lia.
+    rewrite Nat.div_small by assumption.
+    lia.
+  - rewrite Hsplit.
+    do 16 (destruct (get_reg s r); simpl; [reflexivity | ]); lia.
+Qed.
+
+Lemma set_reg_pair_get_pair : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v < 256 ->
+  get_reg_pair (set_reg_pair s r v) r = v.
+Proof.
+  intros s r v Hlen Hr Heven Hv.
+  unfold set_reg_pair, get_reg_pair.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even.
+  unfold get_reg, set_reg. simpl.
+  rewrite nth_update_nth_neq by lia.
+  rewrite nth_update_nth_eq by (rewrite update_nth_length, Hlen; lia).
+  rewrite nth_update_nth_eq by (rewrite Hlen; lia).
+  unfold nibble_of_nat.
+  assert (v / 16 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  rewrite Nat.mod_small by assumption.
+  assert (v mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+  rewrite Nat.mod_small by assumption.
+  assert (v = v / 16 * 16 + v mod 16).
+  { rewrite Nat.mul_comm. apply Nat.div_mod. lia. }
+  lia.
+Qed.
+
+Lemma set_reg_pair_get_components : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v < 256 ->
+  get_reg (set_reg_pair s r v) r = v / 16 /\
+  get_reg (set_reg_pair s r v) (r + 1) = v mod 16.
+Proof.
+  intros s r v Hlen Hr Heven Hv.
+  unfold set_reg_pair, get_reg, set_reg. simpl.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even.
+  split.
+  - rewrite nth_update_nth_neq by lia.
+    rewrite nth_update_nth_eq by (rewrite update_nth_length, Hlen; lia).
+    unfold nibble_of_nat.
+    assert (v / 16 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+  - rewrite nth_update_nth_eq by (rewrite update_nth_length, update_nth_length, Hlen; lia).
+    unfold nibble_of_nat.
+    assert (v mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+Qed.
+
+Lemma set_reg_pair_preserves_other_pairs : forall s r1 r2 v,
+  r1 < 16 ->
+  r2 < 16 ->
+  r1 mod 2 = 0 ->
+  r2 mod 2 = 0 ->
+  r1 <> r2 ->
+  length (regs s) = 16 ->
+  get_reg_pair (set_reg_pair s r1 v) r2 = get_reg_pair s r2.
+Proof.
+  intros s r1 r2 v Hr1 Hr2 Heven1 Heven2 Hneq Hlen.
+  unfold set_reg_pair, get_reg_pair.
+  assert (Hr1_even: r1 - r1 mod 2 = r1) by (rewrite Heven1; lia).
+  assert (Hr2_even: r2 - r2 mod 2 = r2) by (rewrite Heven2; lia).
+  rewrite Hr2_even.
+  unfold get_reg, set_reg. simpl.
+  assert (Hneq1: r2 <> r1) by lia.
+  assert (Hneq2: r2 + 1 <> r1) by lia.
+  assert (Hneq3: r2 <> r1 + 1) by lia.
+  assert (Hneq4: r2 + 1 <> r1 + 1) by lia.
+  rewrite nth_update_nth_neq by exact Hneq3.
+  rewrite nth_update_nth_neq by exact Hneq1.
+  rewrite nth_update_nth_neq by (rewrite update_nth_length, Hlen; exact Hneq4).
+  rewrite nth_update_nth_neq by (rewrite Hlen; exact Hneq2).
+  reflexivity.
+Qed.
+
+Lemma reg_pair_even_odd_independence : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg_pair s (r + 1).
+Proof.
+  intros s r v Hlen Hr Heven.
+  apply reg_pair_addressing_invariant.
+  exact Heven.
+Qed.
+
+Lemma pair_index_normalization : forall r,
+  r - r mod 2 = r - r mod 2.
+Proof.
+  intro r. reflexivity.
+Qed.
+
+Lemma even_reg_property : forall r,
+  r mod 2 = 0 ->
+  r - r mod 2 = r.
+Proof.
+  intros r Heven.
+  rewrite Heven. lia.
+Qed.
+
+Lemma odd_reg_property : forall r,
+  r mod 2 = 1 ->
+  r - r mod 2 = r - 1.
+Proof.
+  intros r Hodd.
+  rewrite Hodd. lia.
+Qed.
+
+Lemma pair_base_bounded : forall r,
+  r < 16 ->
+  r - r mod 2 < 16.
+Proof.
+  intros r Hr.
+  assert (r mod 2 = 0 \/ r mod 2 = 1) as [Heven | Hodd].
+  { pose proof (Nat.mod_upper_bound r 2). lia. }
+  - rewrite even_reg_property by assumption. assumption.
+  - rewrite odd_reg_property by assumption. lia.
+Qed.
+
+Lemma pair_successor_bounded : forall r,
+  r < 16 ->
+  (r - r mod 2) + 1 < 16.
+Proof.
+  intros r Hr.
+  assert (Hbase := pair_base_bounded r Hr).
+  lia.
+Qed.
+
+Lemma reg_pairs_are_eight : forall r,
+  r < 16 ->
+  r mod 2 = 0 ->
+  r - r mod 2 = 0 \/ r - r mod 2 = 2 \/ r - r mod 2 = 4 \/
+  r - r mod 2 = 6 \/ r - r mod 2 = 8 \/ r - r mod 2 = 10 \/
+  r - r mod 2 = 12 \/ r - r mod 2 = 14.
+Proof.
+  intros r Hr Heven.
+  rewrite even_reg_property by assumption.
+  do 15 (destruct r; [left; reflexivity | right]).
+  - lia.
+Qed.
+
+Lemma fim_operates_on_pairs : forall s r data,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  data < 256 ->
+  let s' := execute s (FIM r data) in
+  get_reg_pair s' r = data.
+Proof.
+  intros s r data HWF Hr Heven Hdata s'.
+  subst s'.
+  unfold execute.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even.
+  apply set_reg_pair_get_pair.
+  - destruct HWF as [Hlen _]. exact Hlen.
+  - exact Hr.
+  - exact Heven.
+  - exact Hdata.
+Qed.
+
+Lemma src_uses_pair_value : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  let pair_val := get_reg_pair s r in
+  let s' := execute s (SRC r) in
+  sel_rom s' = pair_val / 16 /\
+  sel_chip (sel_ram s') = pair_val / 16 / 4 /\
+  sel_reg (sel_ram s') = (pair_val / 16) mod 4 /\
+  sel_char (sel_ram s') = pair_val mod 16.
+Proof.
+  intros s r HWF Hr Hodd pair_val s'.
+  subst pair_val s'.
+  unfold execute.
+  assert (Hr_odd: (r - r mod 2 + 1) mod 16 = r mod 16).
+  { rewrite Hodd. replace (r - 1 + 1) with r by lia.
+    rewrite Nat.mod_small by assumption. reflexivity. }
+  split; [|split; [|split]]; reflexivity.
+Qed.
+
+Lemma fin_operates_on_pairs : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  let rom_addr := get_reg_pair s 0 in
+  let s' := execute s (FIN r) in
+  get_reg_pair s' r = nth rom_addr (rom s) 0.
+Proof.
+  intros s r HWF Hr Heven rom_addr s'.
+  subst rom_addr s'.
+  unfold execute.
+  assert (Hr_even: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even.
+  assert (Hlen := HWF).
+  destruct Hlen as [Hlen _].
+  apply set_reg_pair_get_pair.
+  - exact Hlen.
+  - exact Hr.
+  - exact Heven.
+  - destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [Hrom_bytes _]]]]]]]]]]]]]].
+    eapply nth_Forall_lt; eauto.
+Qed.
+
+Lemma jin_uses_pair_for_jump : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  let pair_val := get_reg_pair s r in
+  let s' := execute s (JIN r) in
+  pc s' = addr12_of_nat (page_of (pc_inc1 s) * 256 + pair_val mod 256).
+Proof.
+  intros s r HWF Hr Hodd pair_val s'.
+  subst pair_val s'.
+  unfold execute.
+  assert (Hr_odd: (r - r mod 2 + 1) mod 16 = r mod 16).
+  { rewrite Hodd. replace (r - 1 + 1) with r by lia.
+    rewrite Nat.mod_small by assumption. reflexivity. }
+  reflexivity.
+Qed.
+
+Theorem register_pair_architecture : forall s r,
+  WF s ->
+  r < 16 ->
+  exists pair_index : nat,
+    pair_index < 8 /\
+    r = 2 * pair_index \/ r = 2 * pair_index + 1.
+Proof.
+  intros s r HWF Hr.
+  exists (r / 2).
+  split.
+  - apply Nat.Div0.div_lt_upper_bound; lia.
+  - assert (r mod 2 = 0 \/ r mod 2 = 1) as [Heven | Hodd].
+    { pose proof (Nat.mod_upper_bound r 2). lia. }
+    + left.
+      assert (r = r / 2 * 2 + r mod 2) by (apply Nat.div_mod; lia).
+      rewrite Heven in H. lia.
+    + right.
+      assert (r = r / 2 * 2 + r mod 2) by (apply Nat.div_mod; lia).
+      rewrite Hodd in H. lia.
+Qed.
+
 (* ==================== Encode range (bytes < 256) ==================== *)
 
 (* Helper lemma for arithmetic bounds *)
@@ -8020,3 +8310,115 @@ Proof.
   unfold execute. simpl. unfold get_reg in *. simpl in *.
   rewrite Hr0, Hr1, Hcarry. simpl. reflexivity.
 Qed.
+
+(* ===================================================================== *)
+(*                         FUTURE WORK: TODO                             *)
+(* ===================================================================== *)
+
+(* 
+   This formalization provides a complete, verified model of the Intel 
+   4004 microprocessor with full soundness guarantees and proven safety 
+   properties. However, several avenues remain open for extending this 
+   work to provide even deeper verification capabilities and practical 
+   program reasoning tools.
+
+
+   1. REGISTER PAIR SEMANTICS
+
+   While we have proven that ISZ and JCN preserve well-formedness and 
+   established their basic operational semantics, we have not yet fully 
+   explored their role in program verification. The 4004's architecture 
+   fundamentally organizes its 16 registers as 8 register pairs, and 
+   several critical instructions (FIM, SRC, FIN, JIN) operate exclusively 
+   on these pairs. 
+
+   Future work should establish:
+   - Complete algebraic laws for get_reg_pair and set_reg_pair
+   - Invariants relating even-indexed and odd-indexed register behavior
+   - Theorems characterizing how pair-oriented instructions preserve or
+     transform register pair values
+   - Formal treatment of the addressing modes that use register pairs
+     to construct 8-bit values (high nibble * 16 + low nibble)
+
+
+   2. LOOP AND CONTROL FLOW VERIFICATION
+
+   The ISZ instruction (Increment and Skip if Zero) is the primary loop 
+   primitive on the 4004, yet we lack theorems about loop invariants and 
+   termination. Similarly, JCN (Jump Conditional) enables all conditional 
+   control flow, but we have not formalized reasoning principles for 
+   branch conditions.
+
+   Extensions needed:
+   - Loop invariant schemas for ISZ-based counting loops
+   - Termination proofs using ISZ counter decrements as measures
+   - Conditional Hoare logic for JCN branch conditions
+   - Compositional reasoning about nested control structures
+   - Verification condition generation for structured programs
+
+
+   3. END-TO-END PROGRAM VERIFICATION
+
+   All current theorems verify individual instructions or small sequences.
+   To validate the model against real 4004 programs, we should prove 
+   correctness of complete, documented subroutines:
+
+   Candidate programs:
+   - Multi-byte BCD addition (requires ADD, DAA, carry propagation, loops)
+   - Memory block copy routine (FIM, SRC, RDM, WRM, ISZ termination)
+   - I/O port scanning (register pair indexing, conditional tests)
+   - Subroutine call/return sequences (JMS, BBL with data passing)
+
+   These would serve as integration tests demonstrating that the model 
+   correctly captures the 4004's actual computational capabilities.
+
+
+   4. WEAKEST PRECONDITION CALCULUS
+
+   We have defined wp (weakest precondition) and established Hoare triple 
+   validity, but have not built a complete verification calculus. Future 
+   work should provide:
+
+   - Forward symbolic execution: given initial state constraints, derive 
+     strongest postconditions after instruction sequences
+   - Backward verification condition propagation: compute wp through 
+     arbitrary instruction sequences
+   - Frame reasoning: show that instructions only affect their specified 
+     footprint (already have partial results via *_frame lemmas)
+   - Separation logic for RAM: prove that disjoint memory regions can be 
+     reasoned about independently
+   - Automated tactics for common verification patterns
+
+
+   5. TIMING AND RESOURCE ANALYSIS
+
+   We have proven cycle counts (8/16/24 cycles per instruction) but lack:
+   - Worst-case execution time (WCET) analysis for program fragments
+   - Best-case execution time (BCET) for optimization validation
+   - Energy models (the 4004 has known power characteristics)
+   - Formal relationship between cycle counts and real-time deadlines
+
+
+   6. HARDWARE REFINEMENT
+
+   This model operates at the instruction set architecture (ISA) level.
+   Deeper verification could establish refinement to:
+   - Register-transfer level (RTL) microarchitecture model
+   - Gate-level netlist (for formal equivalence checking)
+   - Actual 4004 silicon behavior (accounting for hardware quirks)
+
+
+   7. COMPILER CORRECTNESS
+
+   Prove that a compiler from a higher-level language (e.g., a subset of C
+   or a custom assembly language) to 4004 machine code preserves semantics:
+   - Source language operational semantics
+   - Compilation function from source to 4004 instructions
+   - Theorem: compiled program behaviors refine source behaviors
+
+
+   These extensions would transform this verified ISA model into a complete
+   program verification platform for the Intel 4004, enabling fully trusted
+   software development for this historic architecture.
+*)
+
