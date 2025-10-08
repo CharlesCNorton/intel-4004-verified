@@ -5904,6 +5904,18 @@ Proof.
       * simpl in Hi. lia.
 Qed.
 
+Corollary load_program_fetches_bytes : forall s base bytes,
+  WF s ->
+  base + length bytes <= 4096 ->
+  Forall (fun b => b < 256) bytes ->
+  forall i, i < length bytes ->
+  fetch_byte (load_program s base bytes) (base + i) = nth i bytes 0.
+Proof.
+  intros s base bytes HWF Hbound Hforall i Hi.
+  unfold fetch_byte.
+  apply load_then_fetch; auto.
+Qed.
+
 Corollary steps_deterministic : forall n s1 s2,
   s1 = s2 -> steps n s1 = steps n s2.
 Proof.
