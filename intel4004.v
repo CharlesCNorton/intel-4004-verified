@@ -5881,7 +5881,28 @@ Theorem load_then_fetch : forall s base bytes,
   forall i, i < length bytes ->
   nth (base + i) (rom s') 0 = nth i bytes 0.
 Proof.
-Admitted.
+  intros s base bytes HWF Hbound Hforall s' i Hi.
+  subst s'.
+  revert s base HWF Hbound i Hi.
+  induction bytes as [|b rest IH]; intros s base HWF Hbound i Hi.
+  - simpl in Hi. lia.
+  - inversion Hforall as [|? ? Hb Hrest]; subst.
+    destruct i as [|i'].
+    + simpl. rewrite Nat.add_0_r.
+      simpl load_program.
+      apply load_program_step_read; auto.
+    + simpl load_program.
+      assert (Hbase1: base + 1 < 4096) by lia.
+      assert (Hbase_eq: addr12_of_nat (base + 1) = base + 1).
+      { unfold addr12_of_nat. rewrite Nat.mod_small by lia. reflexivity. }
+      rewrite Hbase_eq.
+      replace (base + S i') with (base + 1 + i') by lia.
+      apply IH with (s := execute (set_prom_params s base b true) WPM) (base := base + 1).
+      * exact Hrest.
+      * apply load_program_step_preserves_WF; auto. lia.
+      * simpl in Hbound. lia.
+      * simpl in Hi. lia.
+Qed.
 
 Corollary steps_deterministic : forall n s1 s2,
   s1 = s2 -> steps n s1 = steps n s2.
