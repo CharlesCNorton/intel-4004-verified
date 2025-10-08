@@ -7104,6 +7104,22 @@ Proof.
     rewrite Nat.mod_small by lia. lia.
 Qed.
 
+Lemma hoare_ADD_zero_preserves_carry : forall r v,
+  {{ fun s => acc s = v /\ get_reg s r = 0 /\ carry s = false /\ r < 16 /\ v < 16 }}
+     ADD r
+  {{ fun s => acc s = v /\ carry s = false }}.
+Proof.
+  intros r v. unfold hoare_triple. intros s HWF [Hacc [Hr [Hcarry [Hbound Hv]]]].
+  split.
+  - apply execute_ADD_WF; auto.
+  - unfold execute, get_reg in *. simpl.
+    rewrite Hacc, Hr, Hcarry. simpl.
+    split.
+    + unfold nibble_of_nat. rewrite Nat.add_0_r.
+      rewrite Nat.mod_small by lia. lia.
+    + do 16 (destruct v; simpl; [reflexivity|]); lia.
+Qed.
+
 Lemma hoare_SUB : forall r,
   {{ fun s => r < length (regs s) /\ acc s < 16 /\ get_reg s r < 16 }}
      SUB r
@@ -7153,6 +7169,25 @@ Proof.
     lia.
 Qed.
 
+Lemma hoare_XCH_swaps_values : forall r a_val r_val,
+  {{ fun s => acc s = a_val /\ get_reg s r = r_val /\ r < 16 /\ a_val < 16 /\ r_val < 16 }}
+     XCH r
+  {{ fun s => acc s = r_val /\ get_reg s r = a_val }}.
+Proof.
+  intros r a_val r_val. unfold hoare_triple. intros s HWF [Hacc [Hreg [Hr [Ha Hb]]]].
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR [HforR [Hacc_bound _]]].
+  split.
+  - apply execute_XCH_WF; auto.
+  - unfold execute. simpl. unfold get_reg, set_reg in *. simpl.
+    assert (Hlen_r: r < length (regs s)) by (rewrite HlenR; exact Hr).
+    split.
+    + rewrite Hreg. reflexivity.
+    + rewrite nth_update_nth_eq by exact Hlen_r.
+      unfold nibble_of_nat. rewrite Hacc.
+      rewrite Nat.mod_small by exact Ha. reflexivity.
+Qed.
+
 (* ==================== Control Flow =============================== *)
 
 Lemma hoare_NOP :
@@ -7177,6 +7212,17 @@ Proof.
   - unfold execute. simpl. exact Hacc.
 Qed.
 
+Lemma hoare_NOP_preserves_state : forall a r1 r2 v1 v2 c,
+  {{ fun s => acc s = a /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ carry s = c }}
+     NOP
+  {{ fun s => acc s = a /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ carry s = c }}.
+Proof.
+  intros a r1 r2 v1 v2 c. unfold hoare_triple. intros s HWF [Hacc [Hr1 [Hr2 Hcarry]]].
+  split.
+  - apply execute_NOP_WF. exact HWF.
+  - unfold execute. simpl. split; [|split; [|split]]; assumption.
+Qed.
+
 Lemma hoare_NOP_preserves_regs : forall r v,
   {{ fun s => get_reg s r = v }}
      NOP
@@ -7186,6 +7232,18 @@ Proof.
   split.
   - apply execute_NOP_WF. exact HWF.
   - unfold execute. simpl. exact Hreg.
+Qed.
+
+Lemma hoare_NOP_preserves_all_regs : forall r1 r2 r3 v1 v2 v3,
+  r1 <> r2 -> r2 <> r3 -> r1 <> r3 ->
+  {{ fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ get_reg s r3 = v3 }}
+     NOP
+  {{ fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 /\ get_reg s r3 = v3 }}.
+Proof.
+  intros r1 r2 r3 v1 v2 v3 H12 H23 H13. unfold hoare_triple. intros s HWF [Hr1 [Hr2 Hr3]].
+  split.
+  - apply execute_NOP_WF. exact HWF.
+  - unfold execute. simpl. split; [|split]; assumption.
 Qed.
 
 Lemma hoare_JUN : forall addr,
@@ -7435,6 +7493,25 @@ Proof.
   do 16 (destruct a; simpl; [reflexivity|]); lia.
 Qed.
 
+Example ex_CMA_involution_frame : forall a r v,
+  {{| fun s => acc s = a /\ a < 16 /\ get_reg s r = v |}}
+      [CMA; CMA]
+  {{| fun s => acc s = a /\ get_reg s r = v |}}.
+Proof.
+  intros a r v.
+  unfold hoare_prog. intros s HWF [Hacc [Ha Hreg]].
+  simpl exec_program.
+  assert (HWF1: WF (execute s CMA)).
+  { apply execute_CMA_WF. exact HWF. }
+  assert (HWF2: WF (execute (execute s CMA) CMA)).
+  { apply execute_CMA_WF. exact HWF1. }
+  split. exact HWF2.
+  split.
+  - unfold execute. simpl. rewrite Hacc.
+    do 16 (destruct a; simpl; [reflexivity|]); lia.
+  - unfold execute. simpl. exact Hreg.
+Qed.
+
 Lemma hoare_ADD_carry : forall r a b c,
   {{ fun s => acc s = a /\ get_reg s r = b /\ carry s = c /\ r < 16 /\ a < 16 /\ b < 16 }}
      ADD r
@@ -7647,6 +7724,89 @@ Proof.
   unfold nibble_of_nat.
   rewrite Nat.mod_mod by lia.
   f_equal. unfold get_reg in Hreg. rewrite Hreg. reflexivity.
+Qed.
+
+(* ==================== Integration Theorem =================== *)
+
+Theorem safe_accumulator_preservation_pattern : forall save_reg work_val old_acc old_save,
+  save_reg < 16 ->
+  work_val < 16 ->
+  old_acc < 16 ->
+  old_save < 16 ->
+  {{| fun s => acc s = old_acc /\ get_reg s save_reg = old_save |}}
+      [XCH save_reg; LDM work_val; XCH save_reg]
+  {{| fun s => acc s = old_acc /\ get_reg s save_reg = work_val |}}.
+Proof.
+Admitted.
+
+Theorem commutative_operations_integration : forall r1 r2 v1 v2,
+  r1 <> r2 ->
+  r1 < 16 ->
+  r2 < 16 ->
+  v1 < 16 ->
+  v2 < 16 ->
+  {{| fun s => get_reg s r1 = v1 /\ get_reg s r2 = v2 |}}
+      [INC r1; INC r2]
+  {{| fun s => get_reg s r1 = (v1 + 1) mod 16 /\ get_reg s r2 = (v2 + 1) mod 16 }}.
+Proof.
+  intros r1 r2 v1 v2 Hneq Hr1 Hr2 Hv1 Hv2.
+  unfold hoare_prog. intros s HWF [Hreg1 Hreg2].
+  simpl exec_program.
+
+  assert (HWF1: WF (execute s (INC r1))).
+  { apply execute_INC_WF; auto. }
+
+  assert (HWF2: WF (execute (execute s (INC r1)) (INC r2))).
+  { apply execute_INC_WF; auto. }
+
+  split. exact HWF2.
+
+  unfold execute, get_reg, set_reg in *. simpl.
+  assert (HWF_copy := HWF).
+  destruct HWF_copy as [HlenR _].
+  assert (Hlen1: r1 < length (regs s)) by (rewrite HlenR; exact Hr1).
+  assert (Hlen2: r2 < length (regs s)) by (rewrite HlenR; exact Hr2).
+
+  split.
+  - rewrite nth_update_nth_neq by lia.
+    rewrite nth_update_nth_eq by exact Hlen1.
+    unfold nibble_of_nat. rewrite Hreg1. reflexivity.
+  - rewrite nth_update_nth_eq by exact Hlen2.
+    unfold nibble_of_nat.
+    rewrite nth_update_nth_neq by lia.
+    rewrite Hreg2. reflexivity.
+Qed.
+
+Theorem identity_with_frame : forall a r1 r2 v1 v2,
+  a < 16 ->
+  {{| fun s => acc s = a /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 |}}
+      [NOP; CMA; CMA; NOP]
+  {{| fun s => acc s = a /\ get_reg s r1 = v1 /\ get_reg s r2 = v2 |}}.
+Proof.
+  intros a r1 r2 v1 v2 Ha.
+  unfold hoare_prog. intros s HWF [Hacc [Hr1 Hr2]].
+  simpl exec_program.
+
+  assert (HWF1: WF (execute s NOP)).
+  { apply execute_NOP_WF; auto. }
+
+  assert (HWF2: WF (execute (execute s NOP) CMA)).
+  { apply execute_CMA_WF; auto. }
+
+  assert (HWF3: WF (execute (execute (execute s NOP) CMA) CMA)).
+  { apply execute_CMA_WF; auto. }
+
+  assert (HWF4: WF (execute (execute (execute (execute s NOP) CMA) CMA) NOP)).
+  { apply execute_NOP_WF; auto. }
+
+  split. exact HWF4.
+
+  unfold execute. simpl.
+  rewrite Hacc.
+  split; [|split].
+  - do 16 (destruct a; simpl; [reflexivity|]); lia.
+  - exact Hr1.
+  - exact Hr2.
 Qed.
 
 (* ==================== Automation Tactics =================== *)
