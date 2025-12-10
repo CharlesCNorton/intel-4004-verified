@@ -6119,7 +6119,26 @@ Lemma reg_pairs_are_eight : forall r,
   r - r mod 2 = 6 \/ r - r mod 2 = 8 \/ r - r mod 2 = 10 \/
   r - r mod 2 = 12 \/ r - r mod 2 = 14.
 Proof.
-Admitted.
+  intros r Hr Heven.
+  rewrite even_reg_property by assumption.
+  destruct r as [| r]; [left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; right; right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; right; right; right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; right; right; right; right; left; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  destruct r as [| r]; [right; right; right; right; right; right; right; reflexivity |].
+  destruct r as [| r]; [simpl in Heven; discriminate |].
+  lia.
+Qed.
 
 Lemma fim_operates_on_pairs : forall s r data,
   WF s ->
