@@ -4585,6 +4585,173 @@ Proof.
     + right. reflexivity.
 Qed.
 
+(* ==================== ISZ Loop Verification ========================== *)
+
+(** Computes whether ISZ takes the branch (loops) based on register value. *)
+Definition isz_loops (s : Intel4004State) (r : nat) : bool :=
+  negb (nibble_of_nat (get_reg s r + 1) =? 0).
+
+(** Computes whether ISZ skips (terminates loop) based on register value. *)
+Definition isz_terminates (s : Intel4004State) (r : nat) : bool :=
+  nibble_of_nat (get_reg s r + 1) =? 0.
+
+(** Computes iterations remaining until ISZ terminates.
+    If register is v, iterations = 16 - v when v > 0, or 16 when v = 0. *)
+Definition isz_iterations (v : nat) : nat :=
+  if v =? 0 then 16 else 16 - v.
+
+(** Proves isz_loops is true iff register won't wrap to zero. *)
+Theorem isz_loops_iff : forall s r,
+  isz_loops s r = true <-> nibble_of_nat (get_reg s r + 1) <> 0.
+Proof.
+  intros s r.
+  unfold isz_loops.
+  split.
+  - intros H. apply negb_true_iff in H. apply Nat.eqb_neq in H. exact H.
+  - intros H. apply negb_true_iff. apply Nat.eqb_neq. exact H.
+Qed.
+
+(** Proves isz_terminates is true iff register wraps to zero. *)
+Theorem isz_terminates_iff : forall s r,
+  isz_terminates s r = true <-> nibble_of_nat (get_reg s r + 1) = 0.
+Proof.
+  intros s r.
+  unfold isz_terminates.
+  split.
+  - intros H. apply Nat.eqb_eq in H. exact H.
+  - intros H. apply Nat.eqb_eq. exact H.
+Qed.
+
+(** Proves register value 15 causes ISZ to terminate. *)
+Theorem isz_terminates_at_15 : forall s r,
+  get_reg s r = 15 ->
+  isz_terminates s r = true.
+Proof.
+  intros s r H.
+  unfold isz_terminates, nibble_of_nat.
+  rewrite H. reflexivity.
+Qed.
+
+(** Proves register value < 15 causes ISZ to loop. *)
+Theorem isz_loops_when_lt_15 : forall s r,
+  get_reg s r < 15 ->
+  isz_loops s r = true.
+Proof.
+  intros s r H.
+  unfold isz_loops, nibble_of_nat.
+  assert (Hbound: get_reg s r + 1 < 16) by lia.
+  rewrite Nat.mod_small by lia.
+  destruct (get_reg s r + 1 =? 0) eqn:E.
+  - apply Nat.eqb_eq in E. lia.
+  - reflexivity.
+Qed.
+
+(** Proves ISZ iterations measure decreases after each loop iteration. *)
+Theorem isz_iterations_decreases : forall v,
+  v < 15 ->
+  isz_iterations ((v + 1) mod 16) < isz_iterations v.
+Proof.
+  intros v Hv.
+  unfold isz_iterations.
+  rewrite Nat.mod_small by lia.
+  destruct (v =? 0) eqn:Ev; destruct (v + 1 =? 0) eqn:Ev1.
+  - apply Nat.eqb_eq in Ev1. lia.
+  - apply Nat.eqb_eq in Ev. rewrite Ev. simpl. lia.
+  - apply Nat.eqb_eq in Ev1. lia.
+  - lia.
+Qed.
+
+(** Proves ISZ iterations is always positive for values < 16. *)
+Theorem isz_iterations_positive : forall v,
+  v < 16 ->
+  isz_iterations v > 0.
+Proof.
+  intros v Hv.
+  unfold isz_iterations.
+  destruct (v =? 0); lia.
+Qed.
+
+(** Proves ISZ iterations is bounded by 16. *)
+Theorem isz_iterations_bounded : forall v,
+  isz_iterations v <= 16.
+Proof.
+  intros v.
+  unfold isz_iterations.
+  destruct (v =? 0); lia.
+Qed.
+
+(** Proves ISZ branches when isz_loops is true. *)
+Theorem isz_branch_taken : forall s r off,
+  isz_loops s r = true ->
+  pc (execute s (ISZ r off)) = addr12_of_nat (page_base (pc_inc2 s) + off).
+Proof.
+  intros s r off H.
+  unfold execute.
+  unfold isz_loops in H.
+  apply negb_true_iff in H.
+  rewrite H.
+  reflexivity.
+Qed.
+
+(** Proves ISZ skips when isz_terminates is true. *)
+Theorem isz_branch_not_taken : forall s r off,
+  isz_terminates s r = true ->
+  pc (execute s (ISZ r off)) = addr12_of_nat (pc s + 2).
+Proof.
+  intros s r off H.
+  unfold execute.
+  unfold isz_terminates in H.
+  rewrite H.
+  unfold pc_inc2.
+  reflexivity.
+Qed.
+
+(** Proves ISZ always increments the register. *)
+Theorem isz_increments_reg : forall s r off,
+  r < 16 ->
+  length (regs s) = 16 ->
+  get_reg (execute s (ISZ r off)) r = nibble_of_nat (get_reg s r + 1).
+Proof.
+  intros s r off Hr Hlen.
+  unfold execute.
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0) eqn:E;
+  unfold get_reg, set_reg; simpl;
+  rewrite nth_update_nth_eq by lia;
+  unfold nibble_of_nat;
+  rewrite Nat.mod_mod by lia;
+  reflexivity.
+Qed.
+
+(** Proves ISZ preserves other registers. *)
+Theorem isz_preserves_other_reg : forall s r1 r2 off,
+  r1 <> r2 ->
+  get_reg (execute s (ISZ r1 off)) r2 = get_reg s r2.
+Proof.
+  intros s r1 r2 off Hneq.
+  unfold execute.
+  destruct (nibble_of_nat (get_reg s r1 + 1) =? 0) eqn:E;
+  unfold get_reg, set_reg; simpl;
+  apply nth_update_nth_neq; lia.
+Qed.
+
+(** Proves ISZ preserves accumulator. *)
+Theorem isz_preserves_acc : forall s r off,
+  acc (execute s (ISZ r off)) = acc s.
+Proof.
+  intros s r off.
+  unfold execute.
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0); reflexivity.
+Qed.
+
+(** Proves ISZ preserves carry. *)
+Theorem isz_preserves_carry : forall s r off,
+  carry (execute s (ISZ r off)) = carry s.
+Proof.
+  intros s r off.
+  unfold execute.
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0); reflexivity.
+Qed.
+
 Lemma jcn_pc_shape : forall s cond off,
   let s' := execute s (JCN cond off) in
   (pc s' = addr12_of_nat (pc s + 2)) \/
@@ -7920,7 +8087,121 @@ Proof.
     split; [|split]; [exact H1 | exact H2 | exact H3].
 Qed.
 
-(* Need: ISZ, the only loop primitive on the 4004 - without this, we can't verify loops! *)
+(* ==================== ISZ Loop Hoare Rules ======================== *)
+
+(** Hoare rule for ISZ when loop continues (register not wrapping to 0). *)
+Lemma hoare_ISZ_loop : forall r off v,
+  v < 15 ->
+  {{ fun s => get_reg s r = v /\ r < 16 /\ off < 256 }}
+     ISZ r off
+  {{ fun s => get_reg s r = v + 1 }}.
+Proof.
+  intros r off v Hv.
+  unfold hoare_triple. intros s HWF [Hreg [Hr Hoff]].
+  split.
+  - apply execute_ISZ_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - assert (Hlen: length (regs s) = 16).
+    { destruct HWF as [Hlen _]. exact Hlen. }
+    rewrite isz_increments_reg by assumption.
+    unfold nibble_of_nat.
+    rewrite Hreg.
+    rewrite Nat.mod_small by lia.
+    reflexivity.
+Qed.
+
+(** Hoare rule for ISZ when loop terminates (register wrapping to 0). *)
+Lemma hoare_ISZ_terminate : forall r off old_pc,
+  {{ fun s => get_reg s r = 15 /\ r < 16 /\ off < 256 /\ pc s = old_pc }}
+     ISZ r off
+  {{ fun s => get_reg s r = 0 /\ pc s = addr12_of_nat (old_pc + 2) }}.
+Proof.
+  intros r off old_pc.
+  unfold hoare_triple. intros s HWF [Hreg [Hr [Hoff Hpc]]].
+  split.
+  - apply execute_ISZ_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - assert (Hlen: length (regs s) = 16).
+    { destruct HWF as [Hlen _]. exact Hlen. }
+    split.
+    + rewrite isz_increments_reg by assumption.
+      unfold nibble_of_nat.
+      rewrite Hreg.
+      reflexivity.
+    + rewrite isz_branch_not_taken.
+      * rewrite Hpc. reflexivity.
+      * apply isz_terminates_at_15.
+        exact Hreg.
+Qed.
+
+(** Hoare rule for ISZ preserving accumulator. *)
+Lemma hoare_ISZ_preserves_acc : forall r off a,
+  {{ fun s => acc s = a /\ r < 16 /\ off < 256 }}
+     ISZ r off
+  {{ fun s => acc s = a }}.
+Proof.
+  intros r off a.
+  unfold hoare_triple. intros s HWF [Hacc [Hr Hoff]].
+  split.
+  - apply execute_ISZ_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - rewrite isz_preserves_acc.
+    exact Hacc.
+Qed.
+
+(** Hoare rule for ISZ preserving other registers. *)
+Lemma hoare_ISZ_preserves_other : forall r1 r2 off v,
+  r1 <> r2 ->
+  {{ fun s => get_reg s r2 = v /\ r1 < 16 /\ off < 256 }}
+     ISZ r1 off
+  {{ fun s => get_reg s r2 = v }}.
+Proof.
+  intros r1 r2 off v Hneq.
+  unfold hoare_triple. intros s HWF [Hreg [Hr Hoff]].
+  split.
+  - apply execute_ISZ_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - rewrite isz_preserves_other_reg by exact Hneq.
+    exact Hreg.
+Qed.
+
+(** Hoare rule for ISZ with loop invariant preservation. *)
+Lemma hoare_ISZ_invariant : forall r off (Inv : nat -> Intel4004State -> Prop),
+  (forall v s, v < 15 -> Inv v s -> Inv (v + 1) (execute s (ISZ r off))) ->
+  {{ fun s => exists v, v < 15 /\ get_reg s r = v /\ Inv v s /\ r < 16 /\ off < 256 }}
+     ISZ r off
+  {{ fun s => exists v, v < 16 /\ get_reg s r = v /\ Inv v s }}.
+Proof.
+  intros r off Inv Hpres.
+  unfold hoare_triple. intros s HWF [v [Hv [Hreg [HInv [Hr Hoff]]]]].
+  split.
+  - apply execute_ISZ_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - exists (v + 1).
+    assert (Hlen: length (regs s) = 16).
+    { destruct HWF as [Hlen _]. exact Hlen. }
+    split.
+    + lia.
+    + split.
+      * rewrite isz_increments_reg by assumption.
+        unfold nibble_of_nat.
+        rewrite Hreg.
+        rewrite Nat.mod_small by lia.
+        reflexivity.
+      * apply Hpres.
+        exact Hv.
+        exact HInv.
+Qed.
 
 (* ==================== JCN Conditional Branch Hoare Rules ========= *)
 
