@@ -4718,7 +4718,7 @@ Proof.
   unfold get_reg, set_reg; simpl;
   rewrite nth_update_nth_eq by lia;
   unfold nibble_of_nat;
-  rewrite Nat.mod_mod by lia;
+  rewrite Nat.Div0.mod_mod;
   reflexivity.
 Qed.
 
@@ -4904,6 +4904,315 @@ Proof.
   destruct (jcn_condition s cond) eqn:E.
   - left. split. reflexivity. apply jcn_branch_taken. exact E.
   - right. split. reflexivity. apply jcn_branch_not_taken. exact E.
+Qed.
+
+(* ==================== TEST Pin Modeling ==================== *)
+
+Definition set_test_pin (s : Intel4004State) (v : bool) : Intel4004State :=
+  mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+          (ram_sys s) (cur_bank s) (sel_ram s) (rom_ports s) (sel_rom s)
+          (rom s) v (prom_addr s) (prom_data s) (prom_enable s).
+
+Lemma set_test_pin_preserves_WF : forall s v,
+  WF s -> WF (set_test_pin s v).
+Proof.
+  intros s v HWF.
+  unfold set_test_pin, WF in *.
+  simpl.
+  exact HWF.
+Qed.
+
+Lemma set_test_pin_value : forall s v,
+  test_pin (set_test_pin s v) = v.
+Proof.
+  intros.
+  unfold set_test_pin.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma set_test_pin_preserves_acc : forall s v,
+  acc (set_test_pin s v) = acc s.
+Proof.
+  intros.
+  unfold set_test_pin.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma set_test_pin_preserves_pc : forall s v,
+  pc (set_test_pin s v) = pc s.
+Proof.
+  intros.
+  unfold set_test_pin.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma set_test_pin_preserves_regs : forall s v,
+  regs (set_test_pin s v) = regs s.
+Proof.
+  intros.
+  unfold set_test_pin.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma execute_preserves_test_pin : forall s i,
+  test_pin (execute s i) = test_pin s.
+Proof.
+  intros s i.
+  destruct i; unfold execute; try reflexivity;
+  try (cbv [test_pin]; match goal with | |- context [if ?c then _ else _] => destruct c end; reflexivity);
+  try (simpl; destruct (nibble_of_nat (get_reg s _ + 1) =? 0); reflexivity);
+  try (simpl; destruct (pop_stack s) as [[addr|] s']; reflexivity);
+  try (simpl; destruct (prom_enable s); reflexivity).
+Qed.
+
+Theorem test_pin_external_input : forall s1 s2 i,
+  WF s1 ->
+  test_pin s1 = test_pin s2 ->
+  test_pin (execute s1 i) = test_pin (execute s2 i).
+Proof.
+  intros s1 s2 i HWF Heq.
+  rewrite execute_preserves_test_pin.
+  rewrite execute_preserves_test_pin.
+  exact Heq.
+Qed.
+
+Theorem jcn_test_pin_determines_branch : forall s off,
+  (test_pin s = false -> pc (execute s (JCN JCN_JNT off)) = addr12_of_nat (base_for_next2 s + off)) /\
+  (test_pin s = true -> pc (execute s (JCN JCN_JNT off)) = addr12_of_nat (pc s + 2)) /\
+  (test_pin s = true -> pc (execute s (JCN JCN_JT off)) = addr12_of_nat (base_for_next2 s + off)) /\
+  (test_pin s = false -> pc (execute s (JCN JCN_JT off)) = addr12_of_nat (pc s + 2)).
+Proof.
+  intros s off.
+  repeat split; intros Htest.
+  - apply jcn_branch_taken.
+    rewrite jcn_jnt_semantics.
+    rewrite Htest.
+    reflexivity.
+  - apply jcn_branch_not_taken.
+    rewrite jcn_jnt_semantics.
+    rewrite Htest.
+    reflexivity.
+  - apply jcn_branch_taken.
+    rewrite jcn_jt_semantics.
+    exact Htest.
+  - apply jcn_branch_not_taken.
+    rewrite jcn_jt_semantics.
+    rewrite Htest.
+    reflexivity.
+Qed.
+
+(* ==================== RAM Bank Selection (DCL) ==================== *)
+
+Definition set_cur_bank (s : Intel4004State) (b : nat) : Intel4004State :=
+  mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+          (ram_sys s) (b mod NBANKS) (sel_ram s) (rom_ports s) (sel_rom s)
+          (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s).
+
+Lemma set_cur_bank_preserves_WF : forall s b,
+  WF s -> WF (set_cur_bank s b).
+Proof.
+  intros s b HWF.
+  unfold set_cur_bank, WF in *.
+  destruct HWF as [H1 [H2 [H3 [H4 [H5 [H6 [H7 [H8 [H9 [H10 [H11 [H12 [H13 [H14 [H15 [H16 H17]]]]]]]]]]]]]]]].
+  simpl.
+  split. exact H1.
+  split. exact H2.
+  split. exact H3.
+  split. exact H4.
+  split. exact H5.
+  split. exact H6.
+  split. exact H7.
+  split. exact H8.
+  split. assert (Hmod: b mod NBANKS < NBANKS) by (apply Nat.mod_upper_bound; unfold NBANKS; lia).
+         unfold NBANKS in Hmod. exact Hmod.
+  split. exact H10.
+  split. exact H11.
+  split. exact H12.
+  split. exact H13.
+  split. exact H14.
+  split. exact H15.
+  split. exact H16.
+  exact H17.
+Qed.
+
+Lemma set_cur_bank_value : forall s b,
+  b < NBANKS -> cur_bank (set_cur_bank s b) = b.
+Proof.
+  intros s b Hb.
+  unfold set_cur_bank, cur_bank.
+  assert (Hmod: b mod NBANKS = b) by (apply Nat.mod_small; exact Hb).
+  exact Hmod.
+Qed.
+
+Lemma dcl_sets_bank_from_acc : forall s,
+  cur_bank (execute s DCL) = (acc s) mod NBANKS.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma dcl_bank_bounds : forall s,
+  cur_bank (execute s DCL) < NBANKS.
+Proof.
+  intros s.
+  rewrite dcl_sets_bank_from_acc.
+  apply Nat.mod_upper_bound.
+  unfold NBANKS.
+  lia.
+Qed.
+
+Lemma dcl_preserves_acc : forall s,
+  acc (execute s DCL) = acc s.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma dcl_preserves_regs : forall s,
+  regs (execute s DCL) = regs s.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma dcl_preserves_carry : forall s,
+  carry (execute s DCL) = carry s.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma dcl_preserves_ram : forall s,
+  ram_sys (execute s DCL) = ram_sys s.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Theorem bank_selection_complete : forall s b,
+  WF s ->
+  b < NBANKS ->
+  exists s', WF s' /\ cur_bank s' = b /\ ram_sys s' = ram_sys s.
+Proof.
+  intros s b HWF Hb.
+  exists (set_cur_bank s b).
+  split.
+  - apply set_cur_bank_preserves_WF.
+    exact HWF.
+  - split.
+    + apply set_cur_bank_value.
+      exact Hb.
+    + unfold set_cur_bank.
+      simpl.
+      reflexivity.
+Qed.
+
+Theorem dcl_acc_determines_bank : forall s,
+  WF s ->
+  acc s < 4 ->
+  cur_bank (execute s DCL) = acc s.
+Proof.
+  intros s HWF Hacc.
+  rewrite dcl_sets_bank_from_acc.
+  apply Nat.mod_small.
+  unfold NBANKS.
+  exact Hacc.
+Qed.
+
+(* ==================== ROM I/O Port Operations ==================== *)
+
+Lemma src_sets_rom_selection : forall s r,
+  sel_rom (execute s (SRC r)) = get_reg_pair s r / 16.
+Proof.
+  intros s r.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma wrr_writes_to_selected_port : forall s,
+  WF s ->
+  nth (sel_rom s) (rom_ports (execute s WRR)) 0 = nibble_of_nat (acc s).
+Proof.
+  intros s HWF.
+  unfold execute.
+  simpl.
+  destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [Hrplen [_ [Hselrom _]]]]]]]]]]]]].
+  rewrite nth_update_nth_eq.
+  - reflexivity.
+  - rewrite Hrplen. exact Hselrom.
+Qed.
+
+Lemma rdr_reads_from_selected_port : forall s,
+  acc (execute s RDR) = nth (sel_rom s) (rom_ports s) 0.
+Proof.
+  intros s.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma wrr_preserves_other_ports : forall s n,
+  WF s ->
+  n <> sel_rom s ->
+  nth n (rom_ports (execute s WRR)) 0 = nth n (rom_ports s) 0.
+Proof.
+  intros s n HWF Hneq.
+  unfold execute.
+  simpl.
+  apply nth_update_nth_neq.
+  lia.
+Qed.
+
+Theorem wrr_rdr_roundtrip : forall s,
+  WF s ->
+  acc s < 16 ->
+  acc (execute (execute s WRR) RDR) = acc s.
+Proof.
+  intros s HWF Hacc.
+  unfold execute.
+  simpl.
+  destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [Hrplen [_ [Hselrom _]]]]]]]]]]]]].
+  rewrite nth_update_nth_eq.
+  - unfold nibble_of_nat.
+    rewrite Nat.mod_small by exact Hacc.
+    reflexivity.
+  - rewrite Hrplen. exact Hselrom.
+Qed.
+
+Lemma src_wrr_writes_to_pair_port : forall s r v,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  get_reg_pair s r = v ->
+  v < 256 ->
+  nth (v / 16) (rom_ports (execute (execute s (SRC r)) WRR)) 0 =
+  nibble_of_nat (acc s).
+Proof.
+  intros s r v HWF Hr Hodd Hpair Hv.
+  unfold execute.
+  simpl.
+  rewrite Hpair.
+  destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [Hrplen _]]]]]]]]]]].
+  rewrite nth_update_nth_eq.
+  - reflexivity.
+  - rewrite Hrplen.
+    assert (Hdiv: v / 16 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+    exact Hdiv.
 Qed.
 
 (* --- Determinism & PC-shape of step --- *)
@@ -6482,7 +6791,7 @@ Proof.
     lia.
   - rewrite Hsplit.
     replace (get_reg s r * 16 + get_reg s (r + 1)) with (get_reg s (r + 1) + get_reg s r * 16) by lia.
-    rewrite Nat.mod_add by lia.
+    rewrite Nat.Div0.mod_add.
     symmetry. apply Nat.mod_small. assumption.
 Qed.
 
@@ -6571,12 +6880,12 @@ Proof.
   assert (Hneq_r1_r2p1: r1 <> r2 + 1).
   { intro H. assert (r1 mod 2 = (r2 + 1) mod 2) by (rewrite H; reflexivity).
     rewrite Heven1 in H0.
-    assert ((r2 + 1) mod 2 = 1) by (rewrite Nat.add_mod by lia; rewrite Heven2; simpl; reflexivity).
+    assert ((r2 + 1) mod 2 = 1) by (rewrite Nat.Div0.add_mod; rewrite Heven2; simpl; reflexivity).
     lia. }
   assert (Hneq_r1p1_r2: r1 + 1 <> r2).
   { intro H. assert ((r1 + 1) mod 2 = r2 mod 2) by (rewrite H; reflexivity).
     rewrite Heven2 in H0.
-    assert ((r1 + 1) mod 2 = 1) by (rewrite Nat.add_mod by lia; rewrite Heven1; simpl; reflexivity).
+    assert ((r1 + 1) mod 2 = 1) by (rewrite Nat.Div0.add_mod; rewrite Heven1; simpl; reflexivity).
     lia. }
   assert (Hneq_r1p1_r2p1: r1 + 1 <> r2 + 1) by lia.
   rewrite get_reg_set_reg_diff by lia.
@@ -8895,7 +9204,7 @@ Proof.
   assert (Hlen_r: r < length (regs s)) by (rewrite HlenR; exact Hr).
   rewrite nth_update_nth_eq by exact Hlen_r.
   unfold nibble_of_nat.
-  rewrite Nat.mod_mod by lia.
+  rewrite Nat.Div0.mod_mod.
   f_equal. unfold get_reg in Hreg. rewrite Hreg. reflexivity.
 Qed.
 
