@@ -6257,11 +6257,32 @@ Lemma fin_operates_on_pairs : forall s r,
   WF s ->
   r < 16 ->
   r mod 2 = 0 ->
+  page_of (pc_inc1 s) = 0 ->
   let rom_addr := get_reg_pair s 0 in
   let s' := execute s (FIN r) in
   get_reg_pair s' r = nth rom_addr (rom s) 0.
 Proof.
-Admitted.
+  intros s r HWF Hr Heven Hpage rom_addr s'.
+  subst rom_addr s'.
+  assert (Hlen: length (regs s) = 16) by (destruct HWF; assumption).
+  assert (Hfor: Forall (fun x => x < 16) (regs s)) by (destruct HWF as [_ [H _]]; exact H).
+  assert (HromFor: Forall (fun x => x < 256) (rom s)).
+  { destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]]]]]. exact H. }
+  assert (HromLen: length (rom s) = 4096).
+  { destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]]]]]]. exact H. }
+  pose proof (get_reg_pair_bound s 0 Hlen Hfor) as Hbound.
+  assert (Hmod: get_reg_pair s 0 mod 256 = get_reg_pair s 0) by (apply Nat.mod_small; exact Hbound).
+  unfold execute.
+  rewrite Hpage.
+  unfold page_of, addr12_of_nat, fetch_byte.
+  rewrite Hmod.
+  rewrite Nat.mod_small by lia.
+  apply set_reg_pair_get_pair.
+  + exact Hlen.
+  + exact Hr.
+  + exact Heven.
+  + apply (nth_Forall_lt _ 0 _ 256 HromFor). lia.
+Qed.
 
 Lemma jin_uses_pair_for_jump : forall s r,
   WF s ->
