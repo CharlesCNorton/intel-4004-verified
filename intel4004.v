@@ -6047,7 +6047,33 @@ Lemma set_reg_pair_get_components : forall s r v,
   get_reg (set_reg_pair s r v) r = v / 16 /\
   get_reg (set_reg_pair s r v) (r + 1) = v mod 16.
 Proof.
-Admitted.
+  intros s r v Hlen Hr Heven Hv.
+  unfold set_reg_pair.
+  assert (Hr_even_eq: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even_eq.
+  set (s1 := set_reg s r (v / 16)).
+  assert (Hlen1: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_preserves_length. exact Hlen. }
+  assert (Hr1: r + 1 < 16).
+  { assert (r <= 14) by (destruct (Nat.eq_dec r 15); [subst; simpl in Heven; lia | lia]).
+    lia. }
+  assert (Hneq: r <> r + 1) by lia.
+  assert (Hvhi: v / 16 < 16).
+  { apply Nat.Div0.div_lt_upper_bound. lia. }
+  assert (Hvlo: v mod 16 < 16).
+  { apply Nat.mod_upper_bound. lia. }
+  split.
+  - rewrite get_reg_set_reg_diff by lia.
+    subst s1.
+    rewrite get_reg_set_reg_same by assumption.
+    unfold nibble_of_nat.
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+  - rewrite get_reg_set_reg_same by assumption.
+    unfold nibble_of_nat.
+    rewrite Nat.mod_small by assumption.
+    reflexivity.
+Qed.
 
 Lemma set_reg_pair_preserves_other_pairs : forall s r1 r2 v,
   r1 < 16 ->
