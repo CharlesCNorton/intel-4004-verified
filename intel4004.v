@@ -6190,7 +6190,20 @@ Theorem register_pair_architecture : forall s r,
     pair_index < 8 /\
     r = 2 * pair_index \/ r = 2 * pair_index + 1.
 Proof.
-Admitted.
+  intros s r _ Hr.
+  exists (r / 2).
+  assert (Hmod2: r mod 2 = 0 \/ r mod 2 = 1).
+  { pose proof (Nat.mod_upper_bound r 2). lia. }
+  assert (H2ne0: 2 <> 0) by lia.
+  destruct Hmod2 as [Heven | Hodd].
+  - left. split.
+    + apply Nat.Div0.div_lt_upper_bound; lia.
+    + pose proof (Nat.div_mod r 2 H2ne0) as Hdm.
+      rewrite Heven in Hdm. lia.
+  - right.
+    pose proof (Nat.div_mod r 2 H2ne0) as Hdm.
+    rewrite Hodd in Hdm. lia.
+Qed.
 
 (* ==================== Encode range (bytes < 256) ==================== *)
 
