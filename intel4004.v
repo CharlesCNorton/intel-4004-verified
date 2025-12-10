@@ -1931,6 +1931,55 @@ Proof.
   reflexivity.
 Qed.
 
+(* ==================== RAM frame lemmas (disjoint addresses) ========== *)
+
+(** Reading different main index after write returns original value. *)
+Lemma get_main_upd_main_in_reg_neq : forall rg i j v,
+  i <> j ->
+  get_main (upd_main_in_reg rg i v) j = get_main rg j.
+Proof.
+  intros rg i j v Hneq.
+  unfold get_main, upd_main_in_reg. simpl.
+  apply nth_update_nth_neq.
+  lia.
+Qed.
+
+(** Reading different register after update returns original register. *)
+Lemma get_regRAM_upd_reg_in_chip_neq : forall ch r1 r2 rg,
+  r1 <> r2 ->
+  get_regRAM (upd_reg_in_chip ch r1 rg) r2 = get_regRAM ch r2.
+Proof.
+  intros ch r1 r2 rg Hneq.
+  unfold get_regRAM, upd_reg_in_chip. simpl.
+  apply nth_update_nth_neq.
+  lia.
+Qed.
+
+(** Reading different chip after update returns original chip. *)
+Lemma get_chip_upd_chip_in_bank_neq : forall bk c1 c2 ch,
+  c1 <> c2 ->
+  get_chip (upd_chip_in_bank bk c1 ch) c2 = get_chip bk c2.
+Proof.
+  intros bk c1 c2 ch Hneq.
+  unfold get_chip, upd_chip_in_bank. simpl.
+  apply nth_update_nth_neq.
+  lia.
+Qed.
+
+(** Reading different bank after update returns original bank. *)
+Lemma get_bank_upd_bank_in_sys_neq : forall s b1 b2 bk,
+  b1 <> b2 ->
+  get_bank (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+                     (upd_bank_in_sys s b1 bk) (cur_bank s) (sel_ram s)
+                     (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
+           b2 = get_bank s b2.
+Proof.
+  intros s b1 b2 bk Hneq.
+  unfold get_bank, upd_bank_in_sys. simpl.
+  apply nth_update_nth_neq.
+  lia.
+Qed.
+
 (** Proves bank extracted from WF system is WF. *)
 Lemma WF_bank_from_sys : forall s b,
   WF s ->
@@ -5226,6 +5275,100 @@ Proof.
     - rewrite Hs1_sel. exact Hsel_char. }
   rewrite Heq. rewrite Hs1_acc.
   unfold nibble_of_nat. rewrite Nat.mod_small by lia. reflexivity.
+Qed.
+
+(* ==================== RAM frame theorems (disjoint addresses) ======== *)
+
+(** Defines when two RAM address selections differ. *)
+Definition ram_addr_disjoint (b1 c1 r1 i1 b2 c2 r2 i2 : nat) : Prop :=
+  b1 <> b2 \/ c1 <> c2 \/ r1 <> r2 \/ i1 <> i2.
+
+(** RAM write at one address preserves reads at different addresses. *)
+Theorem ram_write_frame_different_char : forall s v i1 i2,
+  WF s ->
+  i1 <> i2 ->
+  i2 < NMAIN ->
+  let bk := get_bank s (cur_bank s) in
+  let ch := get_chip bk (sel_chip (sel_ram s)) in
+  let rg := get_regRAM ch (sel_reg (sel_ram s)) in
+  let rg' := upd_main_in_reg rg i1 v in
+  get_main rg' i2 = get_main rg i2.
+Proof.
+  intros s v i1 i2 HWF Hneq Hi2.
+  apply get_main_upd_main_in_reg_neq.
+  exact Hneq.
+Qed.
+
+(** RAM write at one register preserves reads at different registers. *)
+Theorem ram_write_frame_different_reg : forall s v r1 r2 i,
+  WF s ->
+  r1 <> r2 ->
+  r2 < NREGS ->
+  let bk := get_bank s (cur_bank s) in
+  let ch := get_chip bk (sel_chip (sel_ram s)) in
+  let rg := get_regRAM ch r1 in
+  let rg' := upd_main_in_reg rg i v in
+  let ch' := upd_reg_in_chip ch r1 rg' in
+  get_regRAM ch' r2 = get_regRAM ch r2.
+Proof.
+  intros s v r1 r2 i HWF Hneq Hr2.
+  apply get_regRAM_upd_reg_in_chip_neq.
+  exact Hneq.
+Qed.
+
+(** RAM write at one chip preserves reads at different chips. *)
+Theorem ram_write_frame_different_chip : forall s v c1 c2 r i,
+  WF s ->
+  c1 <> c2 ->
+  c2 < NCHIPS ->
+  let bk := get_bank s (cur_bank s) in
+  let ch := get_chip bk c1 in
+  let rg := get_regRAM ch r in
+  let rg' := upd_main_in_reg rg i v in
+  let ch' := upd_reg_in_chip ch r rg' in
+  let bk' := upd_chip_in_bank bk c1 ch' in
+  get_chip bk' c2 = get_chip bk c2.
+Proof.
+  intros s v c1 c2 r i HWF Hneq Hc2.
+  apply get_chip_upd_chip_in_bank_neq.
+  exact Hneq.
+Qed.
+
+(** RAM write at one bank preserves reads at different banks. *)
+Theorem ram_write_frame_different_bank : forall s v b1 b2,
+  WF s ->
+  b1 <> b2 ->
+  b2 < NBANKS ->
+  let bk := get_bank s b1 in
+  let ch := get_chip bk (sel_chip (sel_ram s)) in
+  let rg := get_regRAM ch (sel_reg (sel_ram s)) in
+  let rg' := upd_main_in_reg rg (sel_char (sel_ram s)) v in
+  let ch' := upd_reg_in_chip ch (sel_reg (sel_ram s)) rg' in
+  let bk' := upd_chip_in_bank bk (sel_chip (sel_ram s)) ch' in
+  get_bank (mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+                    (upd_bank_in_sys s b1 bk') (cur_bank s) (sel_ram s)
+                    (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s))
+           b2 = get_bank s b2.
+Proof.
+  intros s v b1 b2 HWF Hneq Hb2.
+  apply get_bank_upd_bank_in_sys_neq.
+  exact Hneq.
+Qed.
+
+(** Main RAM frame theorem: writing to current address preserves reading from different bank. *)
+Theorem ram_write_main_preserves_other_bank : forall s v b2,
+  WF s ->
+  cur_bank s <> b2 ->
+  b2 < NBANKS ->
+  let s' := mkState (acc s) (regs s) (carry s) (pc s) (stack s)
+                    (ram_write_main_sys s v) (cur_bank s) (sel_ram s)
+                    (rom_ports s) (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_data s) (prom_enable s) in
+  get_bank s' b2 = get_bank s b2.
+Proof.
+  intros s v b2 HWF Hneq Hb2.
+  unfold ram_write_main_sys.
+  apply get_bank_upd_bank_in_sys_neq.
+  exact Hneq.
 Qed.
 
 (** Proves SRC+WRR roundtrip: selected ROM port receives accumulator value. *)
