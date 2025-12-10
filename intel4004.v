@@ -6246,7 +6246,12 @@ Lemma src_uses_pair_value : forall s r,
   sel_reg (sel_ram s') = (pair_val / 16) mod 4 /\
   sel_char (sel_ram s') = pair_val mod 16.
 Proof.
-Admitted.
+  intros s r HWF Hr Hodd pair_val s'.
+  subst pair_val s'.
+  unfold execute.
+  simpl.
+  repeat split; reflexivity.
+Qed.
 
 Lemma fin_operates_on_pairs : forall s r,
   WF s ->
@@ -6266,7 +6271,12 @@ Lemma jin_uses_pair_for_jump : forall s r,
   let s' := execute s (JIN r) in
   pc s' = addr12_of_nat (page_of (pc_inc1 s) * 256 + pair_val mod 256).
 Proof.
-Admitted.
+  intros s r HWF Hr Hodd pair_val s'.
+  subst pair_val s'.
+  unfold execute.
+  simpl.
+  reflexivity.
+Qed.
 
 Theorem register_pair_architecture : forall s r,
   WF s ->
@@ -7501,14 +7511,25 @@ Lemma hoare_FIM : forall r data,
      FIM r data
   {{ fun s => get_reg_pair s r = data }}.
 Proof.
-Admitted.
+  intros r data. unfold hoare_triple. intros s HWF [Hr [Heven Hdata]].
+  split.
+  - apply execute_FIM_WF; [exact HWF | unfold instr_wf; auto].
+  - apply fim_operates_on_pairs; assumption.
+Qed.
 
 Lemma hoare_FIM_frame : forall r data acc_val c_val,
   {{ fun s => r < 16 /\ r mod 2 = 0 /\ data < 256 /\ acc s = acc_val /\ carry s = c_val }}
      FIM r data
   {{ fun s => get_reg_pair s r = data /\ acc s = acc_val /\ carry s = c_val }}.
 Proof.
-Admitted.
+  intros r data acc_val c_val. unfold hoare_triple. intros s HWF [Hr [Heven [Hdata [Hacc Hcarry]]]].
+  split.
+  - apply execute_FIM_WF; [exact HWF | unfold instr_wf; auto].
+  - split; [| split].
+    + apply fim_operates_on_pairs; assumption.
+    + unfold execute. simpl. exact Hacc.
+    + unfold execute. simpl. exact Hcarry.
+Qed.
 
 Lemma hoare_SRC : forall r old_pair,
   {{ fun s => r < 16 /\ r mod 2 = 1 /\ get_reg_pair s r = old_pair }}
