@@ -7547,6 +7547,48 @@ Proof.
     split; [|split; [|split]]; reflexivity.
 Qed.
 
+Lemma ram_addr_chip : forall c r ch,
+  c < 4 -> r < 4 -> ch < 16 ->
+  (c * 64 + r * 16 + ch) / 16 / 4 = c.
+Proof.
+  intros c r ch Hc Hr Hch.
+  assert (Hinner: (c * 64 + r * 16 + ch) / 16 = c * 4 + r).
+  { replace (c * 64) with ((c * 4) * 16) by lia.
+    replace ((c * 4) * 16 + r * 16 + ch) with ((c * 4 + r) * 16 + ch) by lia.
+    rewrite Nat.div_add_l by lia.
+    rewrite Nat.div_small by lia. lia. }
+  rewrite Hinner.
+  rewrite Nat.div_add_l by lia.
+  rewrite Nat.div_small by lia. lia.
+Qed.
+
+Lemma ram_addr_reg : forall c r ch,
+  c < 4 -> r < 4 -> ch < 16 ->
+  (c * 64 + r * 16 + ch) / 16 mod 4 = r.
+Proof.
+  intros c r ch Hc Hr Hch.
+  assert (Hinner: (c * 64 + r * 16 + ch) / 16 = c * 4 + r).
+  { replace (c * 64) with ((c * 4) * 16) by lia.
+    replace ((c * 4) * 16 + r * 16 + ch) with ((c * 4 + r) * 16 + ch) by lia.
+    rewrite Nat.div_add_l by lia.
+    rewrite Nat.div_small by lia. lia. }
+  rewrite Hinner.
+  replace (c * 4 + r) with (r + c * 4) by lia.
+  rewrite Nat.Div0.mod_add.
+  apply Nat.mod_small. lia.
+Qed.
+
+Lemma ram_addr_char : forall c r ch,
+  c < 4 -> r < 4 -> ch < 16 ->
+  (c * 64 + r * 16 + ch) mod 16 = ch.
+Proof.
+  intros c r ch Hc Hr Hch.
+  replace (c * 64) with ((c * 4) * 16) by lia.
+  replace ((c * 4) * 16 + r * 16 + ch) with (ch + (c * 4 + r) * 16) by lia.
+  rewrite Nat.Div0.mod_add.
+  apply Nat.mod_small. lia.
+Qed.
+
 Lemma hoare_SRC_sets_ram_address : forall r chip_val reg_val char_val,
   {{ fun s => r < 16 /\ r mod 2 = 1 /\
               get_reg_pair s r = chip_val * 64 + reg_val * 16 + char_val /\
@@ -7556,7 +7598,17 @@ Lemma hoare_SRC_sets_ram_address : forall r chip_val reg_val char_val,
               sel_reg (sel_ram s) = reg_val /\
               sel_char (sel_ram s) = char_val }}.
 Proof.
-Admitted.
+  intros r chip_val reg_val char_val. unfold hoare_triple.
+  intros s HWF [Hr [Hodd [Hpair [Hchip [Hreg Hchar]]]]].
+  split.
+  - apply execute_SRC_WF; [exact HWF | unfold instr_wf; auto].
+  - unfold execute. simpl.
+    rewrite Hpair.
+    pose proof (ram_addr_chip chip_val reg_val char_val Hchip Hreg Hchar) as H1.
+    pose proof (ram_addr_reg chip_val reg_val char_val Hchip Hreg Hchar) as H2.
+    pose proof (ram_addr_char chip_val reg_val char_val Hchip Hreg Hchar) as H3.
+    split; [|split]; [exact H1 | exact H2 | exact H3].
+Qed.
 
 (* Need: ISZ, the only loop primitive on the 4004 - without this, we can't verify loops! Also need JCN - Conditional branches - needed for any control flow verification! *)
 
