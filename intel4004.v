@@ -6108,7 +6108,9 @@ Lemma pair_successor_bounded : forall r,
   r < 16 ->
   (r - r mod 2) + 1 < 16.
 Proof.
-Admitted.
+  intros r Hr.
+  do 16 (destruct r; [simpl; lia |]); lia.
+Qed.
 
 Lemma reg_pairs_are_eight : forall r,
   r < 16 ->
