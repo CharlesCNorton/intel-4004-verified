@@ -9182,16 +9182,7 @@ Qed.
 
    2. LOOP AND CONTROL FLOW VERIFICATION
 
-   The ISZ instruction (Increment and Skip if Zero) is the primary loop 
-   primitive on the 4004, yet we lack theorems about loop invariants and 
-   termination. Similarly, JCN (Jump Conditional) enables all conditional 
-   control flow, but we have not formalized reasoning principles for 
-   branch conditions.
-
-   Extensions needed:
-   - Loop invariant schemas for ISZ-based counting loops
-   - Termination proofs using ISZ counter decrements as measures
-   - Conditional Hoare logic for JCN branch conditions
+   Remaining extensions:
    - Compositional reasoning about nested control structures
    - Verification condition generation for structured programs
 
@@ -9214,18 +9205,11 @@ Qed.
 
    4. WEAKEST PRECONDITION CALCULUS
 
-   We have defined wp (weakest precondition) and established Hoare triple 
-   validity, but have not built a complete verification calculus. Future 
-   work should provide:
-
-   - Forward symbolic execution: given initial state constraints, derive 
-     strongest postconditions after instruction sequences
-   - Backward verification condition propagation: compute wp through 
+   Remaining work:
+   - Forward symbolic execution: derive strongest postconditions
+   - Backward verification condition propagation: compute wp through
      arbitrary instruction sequences
-   - Frame reasoning: show that instructions only affect their specified 
-     footprint (already have partial results via *_frame lemmas)
-   - Separation logic for RAM: prove that disjoint memory regions can be 
-     reasoned about independently
+   - Full separation logic for RAM with separating conjunction
    - Automated tactics for common verification patterns
 
 
