@@ -6037,7 +6037,28 @@ Lemma set_reg_pair_get_pair : forall s r v,
   v < 256 ->
   get_reg_pair (set_reg_pair s r v) r = v.
 Proof.
-Admitted.
+  intros s r v Hlen Hr Heven Hv.
+  unfold get_reg_pair, set_reg_pair.
+  assert (Hr_even_eq: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even_eq.
+  set (s1 := set_reg s r (v / 16)).
+  assert (Hlen1: length (regs s1) = 16).
+  { subst s1. rewrite set_reg_preserves_length. exact Hlen. }
+  assert (Hr1: r + 1 < 16).
+  { assert (r <= 14) by (destruct (Nat.eq_dec r 15); [subst; simpl in Heven; lia | lia]). lia. }
+  assert (Hvhi: v / 16 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  assert (Hvlo: v mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+  rewrite get_reg_set_reg_diff by lia.
+  subst s1.
+  rewrite get_reg_set_reg_same by assumption.
+  rewrite get_reg_set_reg_same by assumption.
+  unfold nibble_of_nat.
+  rewrite Nat.mod_small by assumption.
+  rewrite Nat.mod_small by assumption.
+  assert (H16ne0: 16 <> 0) by lia.
+  pose proof (Nat.div_mod v 16 H16ne0) as Hdm.
+  lia.
+Qed.
 
 Lemma set_reg_pair_get_components : forall s r v,
   length (regs s) = 16 ->
