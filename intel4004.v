@@ -6219,7 +6219,21 @@ Lemma fim_operates_on_pairs : forall s r data,
   let s' := execute s (FIM r data) in
   get_reg_pair s' r = data.
 Proof.
-Admitted.
+  intros s r data HWF Hr Heven Hdata s'.
+  subst s'.
+  unfold execute.
+  set (s1 := set_reg_pair s r data).
+  unfold get_reg_pair.
+  assert (Hr_even_eq: r - r mod 2 = r) by (rewrite Heven; lia).
+  rewrite Hr_even_eq.
+  unfold get_reg. simpl.
+  destruct HWF as [Hlen _].
+  pose proof (set_reg_pair_get_pair s r data Hlen Hr Heven Hdata) as Hpair.
+  unfold get_reg_pair in Hpair.
+  rewrite Hr_even_eq in Hpair.
+  unfold get_reg in Hpair. simpl in Hpair.
+  exact Hpair.
+Qed.
 
 Lemma src_uses_pair_value : forall s r,
   WF s ->
