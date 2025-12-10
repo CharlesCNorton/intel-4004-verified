@@ -6105,7 +6105,31 @@ Lemma set_reg_pair_preserves_other_pairs : forall s r1 r2 v,
   length (regs s) = 16 ->
   get_reg_pair (set_reg_pair s r1 v) r2 = get_reg_pair s r2.
 Proof.
-Admitted.
+  intros s r1 r2 v Hr1 Hr2 Heven1 Heven2 Hneq Hlen.
+  unfold get_reg_pair, set_reg_pair.
+  assert (Hr1_eq: r1 - r1 mod 2 = r1) by (rewrite Heven1; lia).
+  assert (Hr2_eq: r2 - r2 mod 2 = r2) by (rewrite Heven2; lia).
+  rewrite Hr1_eq, Hr2_eq.
+  set (s1 := set_reg s r1 (v / 16)).
+  assert (Hneq_r1_r2: r1 <> r2) by assumption.
+  assert (Hneq_r1_r2p1: r1 <> r2 + 1).
+  { intro H. assert (r1 mod 2 = (r2 + 1) mod 2) by (rewrite H; reflexivity).
+    rewrite Heven1 in H0.
+    assert ((r2 + 1) mod 2 = 1) by (rewrite Nat.add_mod by lia; rewrite Heven2; simpl; reflexivity).
+    lia. }
+  assert (Hneq_r1p1_r2: r1 + 1 <> r2).
+  { intro H. assert ((r1 + 1) mod 2 = r2 mod 2) by (rewrite H; reflexivity).
+    rewrite Heven2 in H0.
+    assert ((r1 + 1) mod 2 = 1) by (rewrite Nat.add_mod by lia; rewrite Heven1; simpl; reflexivity).
+    lia. }
+  assert (Hneq_r1p1_r2p1: r1 + 1 <> r2 + 1) by lia.
+  rewrite get_reg_set_reg_diff by lia.
+  rewrite get_reg_set_reg_diff by lia.
+  subst s1.
+  rewrite get_reg_set_reg_diff by lia.
+  rewrite get_reg_set_reg_diff by lia.
+  reflexivity.
+Qed.
 
 Lemma reg_pair_even_odd_independence : forall s r,
   length (regs s) = 16 ->
