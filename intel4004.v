@@ -4558,6 +4558,138 @@ Proof.
   - left. simpl. reflexivity.
 Qed.
 
+(* --- JCN condition semantics --- *)
+
+(** Computes whether JCN takes the branch based on condition code and state. *)
+Definition jcn_condition (s : Intel4004State) (cond : nat) : bool :=
+  let c1 := cond / 8 in
+  let c2 := (cond / 4) mod 2 in
+  let c3 := (cond / 2) mod 2 in
+  let c4 := cond mod 2 in
+  let base := orb (andb (acc s =? 0) (c2 =? 1))
+                  (orb (andb (carry s) (c3 =? 1))
+                       (andb (negb (test_pin s)) (c4 =? 1))) in
+  if c1 =? 1 then negb base else base.
+
+(** Named condition codes per Intel 4004 manual. *)
+Definition JCN_JNT : nat := 1.   (* Jump if TEST = 0 *)
+Definition JCN_JC  : nat := 2.   (* Jump if Carry = 1 *)
+Definition JCN_JZ  : nat := 4.   (* Jump if Acc = 0 *)
+Definition JCN_JT  : nat := 9.   (* Jump if TEST = 1 *)
+Definition JCN_JNC : nat := 10.  (* Jump if Carry = 0 *)
+Definition JCN_JNZ : nat := 12.  (* Jump if Acc <> 0 *)
+
+(** Proves JCN branches when jcn_condition is true. *)
+Theorem jcn_branch_taken : forall s cond off,
+  jcn_condition s cond = true ->
+  pc (execute s (JCN cond off)) = addr12_of_nat (base_for_next2 s + off).
+Proof.
+  intros s cond off H.
+  unfold execute, jcn_condition, base_for_next2, pc_inc2 in *.
+  set (c1 := cond / 8) in *.
+  set (c2 := (cond / 4) mod 2) in *.
+  set (c3 := (cond / 2) mod 2) in *.
+  set (c4 := cond mod 2) in *.
+  set (base := orb (andb (acc s =? 0) (c2 =? 1))
+                   (orb (andb (carry s) (c3 =? 1))
+                        (andb (negb (test_pin s)) (c4 =? 1)))) in *.
+  destruct (c1 =? 1) eqn:Ec1; destruct base eqn:Ebase; simpl in H; try discriminate.
+  - reflexivity.
+  - reflexivity.
+Qed.
+
+(** Proves JCN does not branch when jcn_condition is false. *)
+Theorem jcn_branch_not_taken : forall s cond off,
+  jcn_condition s cond = false ->
+  pc (execute s (JCN cond off)) = addr12_of_nat (pc s + 2).
+Proof.
+  intros s cond off H.
+  unfold execute, jcn_condition, pc_inc2 in *.
+  set (c1 := cond / 8) in *.
+  set (c2 := (cond / 4) mod 2) in *.
+  set (c3 := (cond / 2) mod 2) in *.
+  set (c4 := cond mod 2) in *.
+  set (base := orb (andb (acc s =? 0) (c2 =? 1))
+                   (orb (andb (carry s) (c3 =? 1))
+                        (andb (negb (test_pin s)) (c4 =? 1)))) in *.
+  destruct (c1 =? 1) eqn:Ec1; destruct base eqn:Ebase; simpl in H; try discriminate.
+  - reflexivity.
+  - reflexivity.
+Qed.
+
+(** Proves JCN_JZ branches iff accumulator is zero. *)
+Theorem jcn_jz_semantics : forall s,
+  jcn_condition s JCN_JZ = (acc s =? 0).
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JZ.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Proves JCN_JNZ branches iff accumulator is non-zero. *)
+Theorem jcn_jnz_semantics : forall s,
+  jcn_condition s JCN_JNZ = negb (acc s =? 0).
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JNZ.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Proves JCN_JC branches iff carry is set. *)
+Theorem jcn_jc_semantics : forall s,
+  jcn_condition s JCN_JC = carry s.
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JC.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Proves JCN_JNC branches iff carry is clear. *)
+Theorem jcn_jnc_semantics : forall s,
+  jcn_condition s JCN_JNC = negb (carry s).
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JNC.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Proves JCN_JNT branches iff test pin is low. *)
+Theorem jcn_jnt_semantics : forall s,
+  jcn_condition s JCN_JNT = negb (test_pin s).
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JNT.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Proves JCN_JT branches iff test pin is high. *)
+Theorem jcn_jt_semantics : forall s,
+  jcn_condition s JCN_JT = test_pin s.
+Proof.
+  intros s.
+  unfold jcn_condition, JCN_JT.
+  cbn -[acc carry test_pin].
+  destruct (carry s); destruct (test_pin s); destruct (acc s =? 0); reflexivity.
+Qed.
+
+(** Characterizes jcn_condition as decidable branch predicate. *)
+Theorem jcn_condition_decides_branch : forall s cond off,
+  (jcn_condition s cond = true /\
+   pc (execute s (JCN cond off)) = addr12_of_nat (base_for_next2 s + off)) \/
+  (jcn_condition s cond = false /\
+   pc (execute s (JCN cond off)) = addr12_of_nat (pc s + 2)).
+Proof.
+  intros s cond off.
+  destruct (jcn_condition s cond) eqn:E.
+  - left. split. reflexivity. apply jcn_branch_taken. exact E.
+  - right. split. reflexivity. apply jcn_branch_not_taken. exact E.
+Qed.
+
 (* --- Determinism & PC-shape of step --- *)
 
 (* Step function is deterministic: equal inputs produce equal outputs. *)
@@ -7645,8 +7777,165 @@ Proof.
     split; [|split]; [exact H1 | exact H2 | exact H3].
 Qed.
 
-(* Need: ISZ, the only loop primitive on the 4004 - without this, we can't verify loops! Also need JCN - Conditional branches - needed for any control flow verification! *)
+(* Need: ISZ, the only loop primitive on the 4004 - without this, we can't verify loops! *)
 
+(* ==================== JCN Conditional Branch Hoare Rules ========= *)
+
+(** Hoare rule for JCN when branch is taken. *)
+Lemma hoare_JCN_taken : forall cond off P,
+  (forall s, P s -> jcn_condition s cond = true) ->
+  {{ fun s => P s /\ cond < 16 /\ off < 256 }}
+     JCN cond off
+  {{ fun s' => exists s, P s /\ pc s' = addr12_of_nat (base_for_next2 s + off) }}.
+Proof.
+  intros cond off P Hcond.
+  unfold hoare_triple. intros s HWF [HP [Hc Ho]].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - exists s.
+    split.
+    exact HP.
+    apply jcn_branch_taken.
+    apply Hcond.
+    exact HP.
+Qed.
+
+(** Hoare rule for JCN when branch is not taken. *)
+Lemma hoare_JCN_not_taken : forall cond off P,
+  (forall s, P s -> jcn_condition s cond = false) ->
+  {{ fun s => P s /\ cond < 16 /\ off < 256 }}
+     JCN cond off
+  {{ fun s' => exists s, P s /\ pc s' = addr12_of_nat (pc s + 2) }}.
+Proof.
+  intros cond off P Hcond.
+  unfold hoare_triple. intros s HWF [HP [Hc Ho]].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf.
+    split; assumption.
+  - exists s.
+    split.
+    exact HP.
+    apply jcn_branch_not_taken.
+    apply Hcond.
+    exact HP.
+Qed.
+
+(** Hoare rule for JCN_JZ: jump if accumulator is zero. *)
+Lemma hoare_JCN_JZ_taken : forall off,
+  {{ fun s => acc s = 0 /\ off < 256 }}
+     JCN JCN_JZ off
+  {{ fun s' => exists s, acc s = 0 /\ pc s' = addr12_of_nat (base_for_next2 s + off) }}.
+Proof.
+  intros off.
+  unfold hoare_triple. intros s HWF [Hacc Ho].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf, JCN_JZ.
+    split; [lia | assumption].
+  - exists s.
+    split.
+    exact Hacc.
+    apply jcn_branch_taken.
+    rewrite jcn_jz_semantics.
+    rewrite Hacc.
+    reflexivity.
+Qed.
+
+(** Hoare rule for JCN_JZ: fall through if accumulator is non-zero. *)
+Lemma hoare_JCN_JZ_not_taken : forall off v,
+  v <> 0 ->
+  {{ fun s => acc s = v /\ off < 256 }}
+     JCN JCN_JZ off
+  {{ fun s' => exists s, acc s = v /\ pc s' = addr12_of_nat (pc s + 2) }}.
+Proof.
+  intros off v Hneq.
+  unfold hoare_triple. intros s HWF [Hacc Ho].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf, JCN_JZ.
+    split; [lia | assumption].
+  - exists s.
+    split.
+    exact Hacc.
+    apply jcn_branch_not_taken.
+    rewrite jcn_jz_semantics.
+    rewrite Hacc.
+    destruct v; [contradiction | reflexivity].
+Qed.
+
+(** Hoare rule for JCN_JNZ: jump if accumulator is non-zero. *)
+Lemma hoare_JCN_JNZ_taken : forall off v,
+  v <> 0 ->
+  {{ fun s => acc s = v /\ off < 256 }}
+     JCN JCN_JNZ off
+  {{ fun s' => exists s, acc s = v /\ pc s' = addr12_of_nat (base_for_next2 s + off) }}.
+Proof.
+  intros off v Hneq.
+  unfold hoare_triple. intros s HWF [Hacc Ho].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf, JCN_JNZ.
+    split; [lia | assumption].
+  - exists s.
+    split.
+    exact Hacc.
+    apply jcn_branch_taken.
+    rewrite jcn_jnz_semantics.
+    rewrite Hacc.
+    destruct v; [contradiction | reflexivity].
+Qed.
+
+(** Hoare rule for JCN_JC: jump if carry is set. *)
+Lemma hoare_JCN_JC_taken : forall off,
+  {{ fun s => carry s = true /\ off < 256 }}
+     JCN JCN_JC off
+  {{ fun s' => exists s, carry s = true /\ pc s' = addr12_of_nat (base_for_next2 s + off) }}.
+Proof.
+  intros off.
+  unfold hoare_triple. intros s HWF [Hcarry Ho].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf, JCN_JC.
+    split; [lia | assumption].
+  - exists s.
+    split.
+    exact Hcarry.
+    apply jcn_branch_taken.
+    rewrite jcn_jc_semantics.
+    rewrite Hcarry.
+    reflexivity.
+Qed.
+
+(** Hoare rule for JCN_JNC: jump if carry is clear. *)
+Lemma hoare_JCN_JNC_taken : forall off,
+  {{ fun s => carry s = false /\ off < 256 }}
+     JCN JCN_JNC off
+  {{ fun s' => exists s, carry s = false /\ pc s' = addr12_of_nat (base_for_next2 s + off) }}.
+Proof.
+  intros off.
+  unfold hoare_triple. intros s HWF [Hcarry Ho].
+  split.
+  - apply execute_JCN_WF.
+    exact HWF.
+    unfold instr_wf, JCN_JNC.
+    split; [lia | assumption].
+  - exists s.
+    split.
+    exact Hcarry.
+    apply jcn_branch_taken.
+    rewrite jcn_jnc_semantics.
+    rewrite Hcarry.
+    reflexivity.
+Qed.
 
 (* ==================== Control Flow =============================== *)
 
