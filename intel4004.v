@@ -23,7 +23,6 @@ Require Import Coq.Arith.Arith.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Bool.Bool.
 Require Import Coq.NArith.NArith.
-Require Import Lia.
 Require Import Coq.micromega.Lia.
 Import ListNotations.
 
@@ -56,6 +55,76 @@ Qed.
 (** Proves nibble_of_nat always produces values strictly less than 16. *)
 Lemma nibble_lt16 : forall n, nibble_of_nat n < 16.
 Proof. intro n. unfold nibble_of_nat. apply Nat.mod_upper_bound. lia. Qed.
+
+(* ==================== Foundational Arithmetic Lemmas ================= *)
+
+(** Non-zero constants for modular arithmetic. *)
+Lemma sixteen_neq_0 : 16 <> 0. Proof. discriminate. Qed.
+Lemma two56_neq_0 : 256 <> 0. Proof. discriminate. Qed.
+Lemma four096_neq_0 : 4096 <> 0. Proof. discriminate. Qed.
+
+(** Modular bounds for standard bit widths. *)
+Lemma mod16_bound : forall n, n mod 16 < 16.
+Proof. intro n. apply Nat.mod_upper_bound. exact sixteen_neq_0. Qed.
+
+Lemma mod256_bound : forall n, n mod 256 < 256.
+Proof. intro n. apply Nat.mod_upper_bound. exact two56_neq_0. Qed.
+
+Lemma mod4096_bound : forall n, n mod 4096 < 4096.
+Proof. intro n. apply Nat.mod_upper_bound. exact four096_neq_0. Qed.
+
+(** Division bounds for byte decomposition. *)
+Lemma div16_byte_bound : forall n, n < 256 -> n / 16 < 16.
+Proof.
+  intros n Hn.
+  apply Nat.Div0.div_lt_upper_bound.
+  exact Hn.
+Qed.
+
+Lemma div256_addr_bound : forall n, n < 4096 -> n / 256 < 16.
+Proof.
+  intros n Hn.
+  apply Nat.Div0.div_lt_upper_bound.
+  exact Hn.
+Qed.
+
+(** Small value mod identities. *)
+Lemma mod_small_16 : forall n, n < 16 -> n mod 16 = n.
+Proof. intros n Hn. apply Nat.mod_small. exact Hn. Qed.
+
+Lemma mod_small_256 : forall n, n < 256 -> n mod 256 = n.
+Proof. intros n Hn. apply Nat.mod_small. exact Hn. Qed.
+
+Lemma mod_small_4096 : forall n, n < 4096 -> n mod 4096 = n.
+Proof. intros n Hn. apply Nat.mod_small. exact Hn. Qed.
+
+(** Nibble addition bounds. *)
+Lemma nibble_add_bound : forall a b, a < 16 -> b < 16 -> a + b < 32.
+Proof. intros a b Ha Hb. lia. Qed.
+
+Lemma nibble_add_carry_bound : forall a b c, a < 16 -> b < 16 -> c <= 1 -> a + b + c < 33.
+Proof. intros a b c Ha Hb Hc. lia. Qed.
+
+(** Register index bounds. *)
+Lemma reg_index_bound : forall r, r < 16 -> r < 16.
+Proof. auto. Qed.
+
+Lemma reg_pair_even : forall r, r mod 2 = 0 -> r - r mod 2 = r.
+Proof. intros r Hr. rewrite Hr. lia. Qed.
+
+Lemma reg_pair_odd : forall r, r mod 2 = 1 -> r - r mod 2 = r - 1.
+Proof. intros r Hr. rewrite Hr. lia. Qed.
+
+(** Page and address arithmetic. *)
+Lemma page_offset_bound : forall off, off < 256 -> off < 256.
+Proof. auto. Qed.
+
+Lemma addr_page_decomp : forall a, a < 4096 -> a = (a / 256) * 256 + a mod 256.
+Proof.
+  intros a Ha.
+  pose proof (Nat.Div0.div_mod a 256) as H.
+  lia.
+Qed.
 
 (* ========================= List helpers ============================= *)
 
@@ -1618,6 +1687,29 @@ Definition WF (s : Intel4004State) : Prop :=
   length (rom s) = 4096 /\
   prom_addr s < 4096 /\
   prom_data s < 256.
+
+(** Tactic to destruct WF into its 17 named components. *)
+Ltac destruct_WF H :=
+  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+
+(** Tactic to rebuild WF, solving trivial goals with assumption or standard bounds. *)
+Ltac rebuild_WF :=
+  repeat (first
+    [ apply nibble_lt16
+    | apply addr12_bound
+    | apply mod16_bound
+    | apply mod256_bound
+    | apply mod4096_bound
+    | assumption
+    | split ]).
+
+(** Combined tactic: unfolds execute/WF, destructs, simulates, rebuilds. *)
+Ltac prove_WF_preservation :=
+  intros;
+  match goal with
+  | [ H : WF ?s |- _ ] => unfold execute, WF in *; simpl; destruct_WF H; rebuild_WF
+  end.
 
 (** Proves repeat 0 n satisfies Forall (< 16). *)
 Lemma repeat_0_lt_16 : forall n, Forall (fun x => x < 16) (repeat 0 n).
