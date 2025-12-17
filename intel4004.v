@@ -6317,6 +6317,204 @@ Proof.
   reflexivity.
 Qed.
 
+(** INC only modifies target register, leaving pair-partner unchanged. *)
+Lemma inc_preserves_pair_partner : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg (execute s (INC r)) (r + 1) = get_reg s (r + 1).
+Proof.
+  intros s r HWF Hr Heven.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  destruct HWF as [Hlen _].
+  rewrite nth_update_nth_neq by lia.
+  reflexivity.
+Qed.
+
+Lemma inc_preserves_pair_partner_odd : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  r >= 1 ->
+  get_reg (execute s (INC r)) (r - 1) = get_reg s (r - 1).
+Proof.
+  intros s r HWF Hr Hodd Hr1.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  destruct HWF as [Hlen _].
+  rewrite nth_update_nth_neq by lia.
+  reflexivity.
+Qed.
+
+(** XCH only modifies target register, leaving pair-partner unchanged. *)
+Lemma xch_preserves_pair_partner : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg (execute s (XCH r)) (r + 1) = get_reg s (r + 1).
+Proof.
+  intros s r HWF Hr Heven.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  destruct HWF as [Hlen _].
+  rewrite nth_update_nth_neq by lia.
+  reflexivity.
+Qed.
+
+Lemma xch_preserves_pair_partner_odd : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  r >= 1 ->
+  get_reg (execute s (XCH r)) (r - 1) = get_reg s (r - 1).
+Proof.
+  intros s r HWF Hr Hodd Hr1.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  destruct HWF as [Hlen _].
+  rewrite nth_update_nth_neq by lia.
+  reflexivity.
+Qed.
+
+(** INC modifies only one nibble of the pair. *)
+Lemma inc_modifies_single_nibble_even : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair (execute s (INC r)) r =
+    nibble_of_nat (get_reg s r + 1) * 16 + get_reg s (r + 1).
+Proof.
+  intros s r HWF Hr Heven.
+  destruct HWF as [Hlen [Hall _]].
+  unfold get_reg_pair.
+  rewrite Heven.
+  rewrite Nat.sub_0_r.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  assert (Hr1: r + 1 < 16).
+  { do 16 (destruct r; [simpl in Heven; try discriminate; lia |]). lia. }
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  rewrite nth_update_nth_neq by lia.
+  unfold nibble_of_nat.
+  rewrite Nat.Div0.mod_mod.
+  reflexivity.
+Qed.
+
+Lemma inc_modifies_single_nibble_odd : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  r >= 1 ->
+  get_reg_pair (execute s (INC r)) r =
+    get_reg s (r - 1) * 16 + nibble_of_nat (get_reg s r + 1).
+Proof.
+  intros s r HWF Hr Hodd Hr1.
+  destruct HWF as [Hlen [Hall _]].
+  unfold get_reg_pair.
+  rewrite Hodd.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  rewrite nth_update_nth_neq by lia.
+  replace (r - 1 + 1) with r by lia.
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  unfold nibble_of_nat.
+  rewrite Nat.Div0.mod_mod.
+  reflexivity.
+Qed.
+
+(** XCH modifies only one nibble of the pair. *)
+Lemma xch_modifies_single_nibble_even : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair (execute s (XCH r)) r =
+    nibble_of_nat (acc s) * 16 + get_reg s (r + 1).
+Proof.
+  intros s r HWF Hr Heven.
+  destruct HWF as [Hlen [Hall _]].
+  unfold get_reg_pair.
+  rewrite Heven.
+  rewrite Nat.sub_0_r.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  assert (Hr1: r + 1 < 16).
+  { do 16 (destruct r; [simpl in Heven; try discriminate; lia |]). lia. }
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  rewrite nth_update_nth_neq by lia.
+  reflexivity.
+Qed.
+
+Lemma xch_modifies_single_nibble_odd : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  r >= 1 ->
+  get_reg_pair (execute s (XCH r)) r =
+    get_reg s (r - 1) * 16 + nibble_of_nat (acc s).
+Proof.
+  intros s r HWF Hr Hodd Hr1.
+  destruct HWF as [Hlen [Hall _]].
+  unfold get_reg_pair.
+  rewrite Hodd.
+  unfold execute.
+  simpl.
+  unfold get_reg, set_reg.
+  simpl.
+  rewrite nth_update_nth_neq by lia.
+  replace (r - 1 + 1) with r by lia.
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  reflexivity.
+Qed.
+
+(** Non-register-modifying instructions preserve all register pairs. *)
+Lemma ld_preserves_all_pairs : forall s r rp,
+  WF s ->
+  r < 16 ->
+  get_reg_pair (execute s (LD r)) rp = get_reg_pair s rp.
+Proof.
+  intros s r rp HWF Hr.
+  unfold execute, get_reg_pair, get_reg.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma add_preserves_all_pairs : forall s r rp,
+  WF s ->
+  r < 16 ->
+  get_reg_pair (execute s (ADD r)) rp = get_reg_pair s rp.
+Proof.
+  intros s r rp HWF Hr.
+  unfold execute, get_reg_pair, get_reg.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma sub_preserves_all_pairs : forall s r rp,
+  WF s ->
+  r < 16 ->
+  get_reg_pair (execute s (SUB r)) rp = get_reg_pair s rp.
+Proof.
+  intros s r rp HWF Hr.
+  unfold execute, get_reg_pair, get_reg.
+  simpl.
+  reflexivity.
+Qed.
+
 Lemma fim_operates_on_pairs : forall s r data,
   WF s ->
   r < 16 ->
@@ -8844,7 +9042,7 @@ Qed.
    [X] 1.  Concrete witness/counterexample pairs for definitions
    [X] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
    [X] 3.  Invariants relating even/odd-indexed register behavior
-   [ ] 4.  Proof that odd/even register interference handled across all instructions
+   [X] 4.  Proof that odd/even register interference handled across all instructions
    [ ] 5.  Formal treatment of addressing modes using register pairs
    [ ] 6.  Page boundary crossing behavior for page_of
    [ ] 7.  RAM banking model proof of cross-bank isolation
