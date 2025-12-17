@@ -6179,6 +6179,144 @@ Proof.
   lia.
 Qed.
 
+(** The pair base index is always even. *)
+Lemma pair_base_is_even : forall r,
+  (r - r mod 2) mod 2 = 0.
+Proof.
+  intros r.
+  induction r as [|r' IH].
+  - simpl. reflexivity.
+  - destruct (r' mod 2) eqn:E.
+    + assert (S r' mod 2 = 1).
+      { replace (S r') with (r' + 1) by lia.
+        rewrite Nat.add_mod by lia.
+        rewrite E.
+        simpl.
+        reflexivity. }
+      rewrite H.
+      simpl.
+      rewrite Nat.sub_0_r.
+      exact E.
+    + assert (n = 0) by (assert (r' mod 2 < 2) by (apply Nat.mod_upper_bound; lia); lia).
+      subst n.
+      assert (S r' mod 2 = 0).
+      { replace (S r') with (r' + 1) by lia.
+        rewrite Nat.add_mod by lia.
+        rewrite E.
+        simpl.
+        reflexivity. }
+      rewrite H.
+      rewrite Nat.sub_0_r.
+      exact H.
+Qed.
+
+(** Any register gives the same pair value as its pair base. *)
+Lemma get_reg_pair_normalizes : forall s r,
+  get_reg_pair s r = get_reg_pair s (r - r mod 2).
+Proof.
+  intros s r.
+  unfold get_reg_pair.
+  assert (Hbase: (r - r mod 2) - (r - r mod 2) mod 2 = r - r mod 2).
+  { rewrite pair_base_is_even. lia. }
+  rewrite Hbase.
+  reflexivity.
+Qed.
+
+(** Odd register r gives same pair as even register r-1. *)
+Lemma odd_reg_same_pair_as_predecessor : forall s r,
+  r mod 2 = 1 ->
+  r >= 1 ->
+  get_reg_pair s r = get_reg_pair s (r - 1).
+Proof.
+  intros s r Hodd Hr1.
+  rewrite get_reg_pair_normalizes.
+  rewrite get_reg_pair_normalizes.
+  rewrite Hodd.
+  assert (Hpred: (r - 1) mod 2 = 0).
+  { destruct r; [lia |].
+    replace (S r - 1) with r by lia.
+    assert (S r mod 2 = 1) by exact Hodd.
+    destruct (r mod 2) eqn:E.
+    - reflexivity.
+    - assert (r mod 2 < 2) by (apply Nat.mod_upper_bound; lia).
+      assert (n = 0) by lia.
+      subst n.
+      replace (S r) with (r + 1) in H by lia.
+      rewrite Nat.add_mod in H by lia.
+      rewrite E in H.
+      simpl in H.
+      discriminate. }
+  rewrite Hpred.
+  rewrite Nat.sub_0_r.
+  reflexivity.
+Qed.
+
+(** Even register r gives same pair as odd register r+1. *)
+Lemma even_reg_same_pair_as_successor : forall s r,
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg_pair s (r + 1).
+Proof.
+  intros s r Heven.
+  assert (Hsucc: (r + 1) mod 2 = 1).
+  { rewrite Nat.add_mod by lia. rewrite Heven. simpl. reflexivity. }
+  rewrite get_reg_pair_normalizes.
+  rewrite (get_reg_pair_normalizes s (r + 1)).
+  rewrite Heven.
+  rewrite Nat.sub_0_r.
+  rewrite Hsucc.
+  replace (r + 1 - 1) with r by lia.
+  reflexivity.
+Qed.
+
+(** Setting even register affects high nibble of pair. *)
+Lemma set_reg_affects_pair_high : forall s r v,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v < 16 ->
+  get_reg_pair (set_reg s r v) r = v * 16 + get_reg s (r + 1).
+Proof.
+  intros s r v Hlen Hall Hr Heven Hv.
+  unfold get_reg_pair.
+  rewrite Heven.
+  rewrite Nat.sub_0_r.
+  unfold get_reg, set_reg.
+  simpl.
+  assert (Hr1: r + 1 < 16).
+  { do 16 (destruct r; [simpl in Heven; try discriminate; simpl; lia |]). lia. }
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  rewrite nth_update_nth_neq by lia.
+  unfold nibble_of_nat.
+  rewrite Nat.mod_small by exact Hv.
+  reflexivity.
+Qed.
+
+(** Setting odd register affects low nibble of pair. *)
+Lemma set_reg_affects_pair_low : forall s r v,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  v < 16 ->
+  r >= 1 ->
+  get_reg_pair (set_reg s r v) r = get_reg s (r - 1) * 16 + v.
+Proof.
+  intros s r v Hlen Hall Hr Hodd Hv Hr1.
+  unfold get_reg_pair.
+  rewrite Hodd.
+  unfold get_reg, set_reg.
+  simpl.
+  assert (Hr_1: r - 1 < 16) by lia.
+  assert (Hneq: r - 1 <> r) by lia.
+  rewrite nth_update_nth_neq by lia.
+  replace (r - 1 + 1) with r by lia.
+  rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
+  unfold nibble_of_nat.
+  rewrite Nat.mod_small by exact Hv.
+  reflexivity.
+Qed.
+
 Lemma fim_operates_on_pairs : forall s r data,
   WF s ->
   r < 16 ->
@@ -8705,7 +8843,7 @@ Qed.
 (*
    [X] 1.  Concrete witness/counterexample pairs for definitions
    [X] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
-   [ ] 3.  Invariants relating even/odd-indexed register behavior
+   [X] 3.  Invariants relating even/odd-indexed register behavior
    [ ] 4.  Proof that odd/even register interference handled across all instructions
    [ ] 5.  Formal treatment of addressing modes using register pairs
    [ ] 6.  Page boundary crossing behavior for page_of
