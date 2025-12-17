@@ -73,6 +73,11 @@ Proof. intro n. apply Nat.mod_upper_bound. exact two56_neq_0. Qed.
 Lemma mod4096_bound : forall n, n mod 4096 < 4096.
 Proof. intro n. apply Nat.mod_upper_bound. exact four096_neq_0. Qed.
 
+Lemma four_neq_0 : 4 <> 0. Proof. discriminate. Qed.
+
+Lemma mod4_bound : forall n, n mod 4 < 4.
+Proof. intro n. apply Nat.mod_upper_bound. exact four_neq_0. Qed.
+
 (** Division bounds for byte decomposition. *)
 Lemma div16_byte_bound : forall n, n < 256 -> n / 16 < 16.
 Proof.
@@ -2127,6 +2132,15 @@ Ltac destruct_WF H :=
   destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
     [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
 
+(** Tactic to solve computed mod bounds (after simpl expands mod to Nat.divmod). *)
+Ltac solve_mod_bound :=
+  match goal with
+  | |- _ < 4 => unfold NBANKS in *; vm_compute; reflexivity
+  | |- _ < 16 => vm_compute; reflexivity
+  | |- _ < 256 => vm_compute; reflexivity
+  | |- _ < 4096 => vm_compute; reflexivity
+  end.
+
 (** Tactic to rebuild WF, solving trivial goals with assumption or standard bounds. *)
 Ltac rebuild_WF :=
   repeat (first
@@ -2135,10 +2149,12 @@ Ltac rebuild_WF :=
     | apply mod16_bound
     | apply mod256_bound
     | apply mod4096_bound
+    | apply mod4_bound
     | apply ram_read_main_bound; eassumption
     | apply get_stat_bound; eassumption
     | eapply nth_Forall_lt; [eassumption | lia]
     | apply Nat.mod_upper_bound; unfold NBANKS, NCHIPS, NREGS, NMAIN, NSTAT; lia
+    | solve_mod_bound
     | eassumption
     | assumption
     | lia
@@ -3749,31 +3765,7 @@ Proof. prove_WF_preservation. Qed.
 
 (** Proves DCL instruction preserves WF invariant. *)
 Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
-Proof.
-  intros s H.
-  unfold execute, WF in *. simpl.
-  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. exact HlenR.
-  split. exact HforR.
-  split. exact Hacc.
-  split. apply addr12_bound.
-  split. exact Hstklen.
-  split. exact HstkFor.
-  split. exact HsysLen.
-  split. exact HsysFor.
-  split.
-  { assert (Hmod: acc s mod NBANKS < NBANKS) by (apply Nat.mod_upper_bound; unfold NBANKS; lia).
-    unfold NBANKS in Hmod. unfold NBANKS. exact Hmod. }
-  split. exact Hsel.
-  split. exact HrpLen.
-  split. exact HrpFor.
-  split. exact Hselrom.
-  split. exact HromFor.
-  split. exact HromLen.
-  split. exact Hpaddr.
-  exact Hpdata.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Main preservation theorem: execute preserves WF for all well-formed instructions. *)
 Theorem execute_preserves_WF :
