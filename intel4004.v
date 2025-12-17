@@ -1701,6 +1701,7 @@ Ltac rebuild_WF :=
     | apply mod16_bound
     | apply mod256_bound
     | apply mod4096_bound
+    | eassumption
     | assumption
     | lia
     | split ]).
@@ -2968,28 +2969,7 @@ Qed.
 
 (** Proves JUN execution preserves well-formedness. *)
 Lemma execute_JUN_WF : forall s a, WF s -> instr_wf (JUN a) -> WF (execute s (JUN a)).
-Proof.
-  intros s a HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. exact Hwfi.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves register pair value is bounded by 256. *)
 Lemma get_reg_pair_bound_helper : forall s r,
