@@ -3224,27 +3224,11 @@ Lemma execute_WRM_WF : forall s, WF s -> WF (execute s WRM).
 Proof.
   intros s HWF.
   assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_main_sys_preserves_len. assumption.
-  split. apply ram_write_main_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_main_sys s (acc s)) = NBANKS)
+    by (apply ram_write_main_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_main_sys s (acc s)))
+    by (apply ram_write_main_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves WMP instruction preserves WF invariant. *)
@@ -3252,53 +3236,23 @@ Lemma execute_WMP_WF : forall s, WF s -> WF (execute s WMP).
 Proof.
   intros s HWF.
   assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_port_sys_preserves_len. assumption.
-  split. apply ram_write_port_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_port_sys s (acc s)) = NBANKS)
+    by (apply ram_write_port_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_port_sys s (acc s)))
+    by (apply ram_write_port_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves WRR instruction preserves WF invariant. *)
 Lemma execute_WRR_WF : forall s, WF s -> WF (execute s WRR).
 Proof.
   intros s HWF. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. rewrite update_nth_length. assumption.
-  split. apply Forall_update_nth; auto. apply nibble_lt16.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF.
+  assert (HrpLen': length (update_nth (sel_rom s) (nibble_of_nat (acc s)) (rom_ports s)) = 16)
+    by (rewrite update_nth_length; assumption).
+  assert (HrpFor': Forall (fun x => x < 16) (update_nth (sel_rom s) (nibble_of_nat (acc s)) (rom_ports s)))
+    by (apply Forall_update_nth; auto; apply nibble_lt16).
+  unfold WF. simpl. rebuild_WF.
 Qed.
 
 (** Proves update_nth preserves Forall (< 256) on nat lists when replacement is bounded. *)
@@ -3315,156 +3269,66 @@ Qed.
 Lemma execute_WPM_WF : forall s, WF s -> WF (execute s WPM).
 Proof.
   intros s HWF. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF. simpl.
+  destruct_WF HWF.
   destruct (prom_enable s) eqn:Eprom.
-  - split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply update_nth_preserves_Forall256; assumption.
-    split. rewrite update_nth_length. assumption.
-    split. assumption.
-    assumption.
-  - split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
+  - assert (HromFor': Forall (fun y => y < 256) (update_nth (prom_addr s) (prom_data s) (rom s)))
+      by (apply update_nth_preserves_Forall256; assumption).
+    assert (HromLen': length (update_nth (prom_addr s) (prom_data s) (rom s)) = 4096)
+      by (rewrite update_nth_length; assumption).
+    unfold WF. rebuild_WF.
+  - unfold WF. rebuild_WF.
 Qed.
+
+(** Helper for WR0-WR3: assert status RAM write preserves length and WF_bank. *)
+Ltac setup_wr_status_wf HWF idx :=
+  assert (HWF': WF HWF) by assumption;
+  assert (HsysLen': length (ram_write_status_sys HWF idx (acc HWF)) = NBANKS)
+    by (apply ram_write_status_sys_preserves_len; assumption);
+  assert (HsysFor': Forall WF_bank (ram_write_status_sys HWF idx (acc HWF)))
+    by (apply ram_write_status_sys_preserves_WF_bank; assumption).
 
 (** Proves WR0 instruction preserves WF invariant. *)
 Lemma execute_WR0_WF : forall s, WF s -> WF (execute s WR0).
 Proof.
   intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_status_sys_preserves_len. assumption.
-  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_status_sys s 0 (acc s)) = NBANKS)
+    by (apply ram_write_status_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_status_sys s 0 (acc s)))
+    by (apply ram_write_status_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves WR1 instruction preserves WF invariant. *)
 Lemma execute_WR1_WF : forall s, WF s -> WF (execute s WR1).
 Proof.
   intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_status_sys_preserves_len. assumption.
-  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_status_sys s 1 (acc s)) = NBANKS)
+    by (apply ram_write_status_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_status_sys s 1 (acc s)))
+    by (apply ram_write_status_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves WR2 instruction preserves WF invariant. *)
 Lemma execute_WR2_WF : forall s, WF s -> WF (execute s WR2).
 Proof.
   intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_status_sys_preserves_len. assumption.
-  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_status_sys s 2 (acc s)) = NBANKS)
+    by (apply ram_write_status_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_status_sys s 2 (acc s)))
+    by (apply ram_write_status_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves WR3 instruction preserves WF invariant. *)
 Lemma execute_WR3_WF : forall s, WF s -> WF (execute s WR3).
 Proof.
   intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. apply ram_write_status_sys_preserves_len. assumption.
-  split. apply ram_write_status_sys_preserves_WF_bank. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (HsysLen': length (ram_write_status_sys s 3 (acc s)) = NBANKS)
+    by (apply ram_write_status_sys_preserves_len; assumption).
+  assert (HsysFor': Forall WF_bank (ram_write_status_sys s 3 (acc s)))
+    by (apply ram_write_status_sys_preserves_WF_bank; assumption).
+  unfold execute. destruct_WF HWF. unfold WF. rebuild_WF.
 Qed.
 
 (** Proves SBM instruction preserves WF invariant. *)
