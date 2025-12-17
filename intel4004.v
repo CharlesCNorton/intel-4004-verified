@@ -9155,33 +9155,28 @@ Qed.
 (* ===================================================================== *)
 
 (*
-   [X] 1.  Concrete witness/counterexample pairs for definitions
-   [X] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
-   [X] 3.  Invariants relating even/odd-indexed register behavior
-   [X] 4.  Proof that odd/even register interference handled across all instructions
-   [X] 5.  Formal treatment of addressing modes using register pairs
-   [ ] 6.  Page boundary crossing behavior for page_of
-   [ ] 7.  RAM banking model proof of cross-bank isolation
-   [ ] 8.  Atomicity or single-writer semantics for memory operations
-   [ ] 9.  Systematic coverage of instruction sequences that could corrupt state
-   [ ] 10. Full separation logic for RAM with separating conjunction
-   [ ] 11. Loop invariant reasoning for nested loops and arbitrary invariants
-   [ ] 12. Compositional reasoning about nested control structures
-   [ ] 13. Verification condition generation for structured programs
-   [ ] 14. Forward symbolic execution: derive strongest postconditions
-   [ ] 15. Backward verification condition propagation
-   [ ] 16. Automated tactics for common verification patterns
-   [ ] 17. Multi-byte BCD addition (ADD, DAA, carry propagation)
-   [ ] 18. Memory block copy routine (FIM, SRC, RDM, WRM, ISZ termination)
-   [ ] 19. I/O port scanning (using wrr_rdr_roundtrip infrastructure)
-   [ ] 20. Subroutine call/return sequences (JMS, BBL with data passing)
-   [ ] 21. Worst-case execution time (WCET) analysis for program fragments
-   [ ] 22. Best-case execution time (BCET) for optimization validation
-   [ ] 23. Formal relationship between cycle counts and real-time deadlines
-   [ ] 24. Register-transfer level (RTL) microarchitecture model
-   [ ] 25. Gate-level netlist (for formal equivalence checking)
-   [ ] 26. Source language operational semantics
-   [ ] 27. Compilation function from source to 4004 instructions
-   [ ] 28. Compiled program behaviors refine source behaviors
+   [ ] 1.  Page boundary crossing behavior for page_of
+   [ ] 2.  RAM banking model proof of cross-bank isolation
+   [ ] 3.  Atomicity or single-writer semantics for memory operations
+   [ ] 4.  Systematic coverage of instruction sequences that could corrupt state
+   [ ] 5.  Full separation logic for RAM with separating conjunction
+   [ ] 6.  Loop invariant reasoning for nested loops and arbitrary invariants
+   [ ] 7.  Compositional reasoning about nested control structures
+   [ ] 8.  Verification condition generation for structured programs
+   [ ] 9.  Forward symbolic execution: derive strongest postconditions
+   [ ] 10. Backward verification condition propagation
+   [ ] 11. Automated tactics for common verification patterns
+   [ ] 12. Multi-byte BCD addition (ADD, DAA, carry propagation)
+   [ ] 13. Memory block copy routine (FIM, SRC, RDM, WRM, ISZ termination)
+   [ ] 14. I/O port scanning (using wrr_rdr_roundtrip infrastructure)
+   [ ] 15. Subroutine call/return sequences (JMS, BBL with data passing)
+   [ ] 16. Worst-case execution time (WCET) analysis for program fragments
+   [ ] 17. Best-case execution time (BCET) for optimization validation
+   [ ] 18. Formal relationship between cycle counts and real-time deadlines
+   [ ] 19. Register-transfer level (RTL) microarchitecture model
+   [ ] 20. Gate-level netlist (for formal equivalence checking)
+   [ ] 21. Source language operational semantics
+   [ ] 22. Compilation function from source to 4004 instructions
+   [ ] 23. Compiled program behaviors refine source behaviors
 *)
 
