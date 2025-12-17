@@ -1688,31 +1688,6 @@ Definition WF (s : Intel4004State) : Prop :=
   prom_addr s < 4096 /\
   prom_data s < 256.
 
-(** Tactic to destruct WF into its 17 named components. *)
-Ltac destruct_WF H :=
-  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-
-(** Tactic to rebuild WF, solving trivial goals with assumption or standard bounds. *)
-Ltac rebuild_WF :=
-  repeat (first
-    [ apply nibble_lt16
-    | apply addr12_bound
-    | apply mod16_bound
-    | apply mod256_bound
-    | apply mod4096_bound
-    | eassumption
-    | assumption
-    | lia
-    | split ]).
-
-(** Combined tactic: unfolds execute/WF, destructs, simulates, rebuilds. *)
-Ltac prove_WF_preservation :=
-  intros;
-  match goal with
-  | [ H : WF ?s |- _ ] => unfold execute, WF in *; simpl; destruct_WF H; rebuild_WF
-  end.
-
 (** Proves repeat 0 n satisfies Forall (< 16). *)
 Lemma repeat_0_lt_16 : forall n, Forall (fun x => x < 16) (repeat 0 n).
 Proof.
@@ -2107,6 +2082,75 @@ Proof.
   rewrite Forall_forall in Hforall.
   apply Hforall. eapply nth_In. lia.
 Qed.
+
+(** Proves reading from main RAM under WF yields 4-bit value. *)
+Lemma ram_read_main_bound : forall s,
+  WF s ->
+  ram_read_main s < 16.
+Proof.
+  intros s HWF.
+  unfold ram_read_main.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  destruct Hrg as [Hmain_len [Hmain_for _]].
+  unfold get_main.
+  eapply nth_Forall_lt; eauto; lia.
+Qed.
+
+(** Proves reading from status RAM under WF yields 4-bit value. *)
+Lemma get_stat_bound : forall s,
+  WF s ->
+  forall idx,
+  let b := get_bank s (cur_bank s) in
+  let ch := get_chip b (sel_chip (sel_ram s)) in
+  let rg := get_regRAM ch (sel_reg (sel_ram s)) in
+  get_stat rg idx < 16.
+Proof.
+  intros s HWF idx.
+  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
+  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
+  destruct Hsel as [Hchip [Hreg Hchar]].
+  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
+  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
+  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
+  destruct Hrg as [_ [_ [Hstat_len Hstat_for]]].
+  unfold get_stat.
+  eapply nth_Forall_lt; eauto; lia.
+Qed.
+
+(** Tactic to destruct WF into its 17 named components. *)
+Ltac destruct_WF H :=
+  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+
+(** Tactic to rebuild WF, solving trivial goals with assumption or standard bounds. *)
+Ltac rebuild_WF :=
+  repeat (first
+    [ apply nibble_lt16
+    | apply addr12_bound
+    | apply mod16_bound
+    | apply mod256_bound
+    | apply mod4096_bound
+    | apply ram_read_main_bound; eassumption
+    | apply get_stat_bound; eassumption
+    | eassumption
+    | assumption
+    | lia
+    | split ]).
+
+(** Combined tactic: unfolds execute/WF, destructs, simulates, rebuilds. *)
+Ltac prove_WF_preservation :=
+  intros;
+  match goal with
+  | [ H : WF ?s |- _ ] =>
+      let HWF' := fresh "HWF'" in
+      assert (HWF' : WF s) by exact H;
+      unfold execute, WF in *; simpl; destruct_WF H; rebuild_WF
+  end.
 
 (** Main RAM read-after-write correctness: reading main RAM returns normalized written value. *)
 Lemma ram_write_then_read_main : forall s v,
@@ -3442,45 +3486,6 @@ Proof.
   apply Forall_update_nth; auto.
 Qed.
 
-(** Proves reading from main RAM under WF yields 4-bit value. *)
-Lemma ram_read_main_bound : forall s,
-  WF s ->
-  ram_read_main s < 16.
-Proof.
-  intros s HWF.
-  unfold ram_read_main.
-  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
-  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
-  destruct Hsel as [Hchip [Hreg Hchar]].
-  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
-  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
-  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
-  destruct Hrg as [Hmain_len [Hmain_for _]].
-  unfold get_main.
-  eapply nth_Forall_lt; eauto; lia.
-Qed.
-
-(** Proves reading from status RAM under WF yields 4-bit value. *)
-Lemma get_stat_bound : forall s,
-  WF s ->
-  forall idx,
-  let b := get_bank s (cur_bank s) in
-  let ch := get_chip b (sel_chip (sel_ram s)) in
-  let rg := get_regRAM ch (sel_reg (sel_ram s)) in
-  get_stat rg idx < 16.
-Proof.
-  intros s HWF idx.
-  assert (Hbank: cur_bank s < NBANKS) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]; exact H).
-  assert (Hsel: WF_sel (sel_ram s)) by (destruct HWF as [_ [_ [_ [_ [_ [_ [_ [_ [_ [H _]]]]]]]]]]; exact H).
-  destruct Hsel as [Hchip [Hreg Hchar]].
-  pose proof (WF_bank_from_sys s (cur_bank s) HWF Hbank) as Hbk.
-  pose proof (WF_chip_from_bank _ (sel_chip (sel_ram s)) Hbk Hchip) as Hch.
-  pose proof (WF_reg_from_chip _ (sel_reg (sel_ram s)) Hch Hreg) as Hrg.
-  destruct Hrg as [_ [_ [Hstat_len Hstat_for]]].
-  unfold get_stat.
-  eapply nth_Forall_lt; eauto; lia.
-Qed.
-
 (** Proves WRM instruction preserves WF invariant. *)
 Lemma execute_WRM_WF : forall s, WF s -> WF (execute s WRM).
 Proof.
@@ -3731,56 +3736,11 @@ Qed.
 
 (** Proves SBM instruction preserves WF invariant. *)
 Lemma execute_SBM_WF : forall s, WF s -> WF (execute s SBM).
-Proof.
-  intros s HWF. unfold execute, WF in *.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RDM instruction preserves WF invariant. *)
 Lemma execute_RDM_WF : forall s, WF s -> WF (execute s RDM).
-Proof.
-  intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. apply ram_read_main_bound. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RDR instruction preserves WF invariant. *)
 Lemma execute_RDR_WF : forall s, WF s -> WF (execute s RDR).
@@ -3809,140 +3769,23 @@ Qed.
 
 (** Proves ADM instruction preserves WF invariant. *)
 Lemma execute_ADM_WF : forall s, WF s -> WF (execute s ADM).
-Proof.
-  intros s HWF. unfold execute, WF in *.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RD0 instruction preserves WF invariant. *)
 Lemma execute_RD0_WF : forall s, WF s -> WF (execute s RD0).
-Proof.
-  intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. apply get_stat_bound. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RD1 instruction preserves WF invariant. *)
 Lemma execute_RD1_WF : forall s, WF s -> WF (execute s RD1).
-Proof.
-  intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. apply get_stat_bound. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RD2 instruction preserves WF invariant. *)
 Lemma execute_RD2_WF : forall s, WF s -> WF (execute s RD2).
-Proof.
-  intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. apply get_stat_bound. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RD3 instruction preserves WF invariant. *)
 Lemma execute_RD3_WF : forall s, WF s -> WF (execute s RD3).
-Proof.
-  intros s HWF.
-  assert (HWF': WF s) by assumption.
-  unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold WF.
-  split. assumption.
-  split. assumption.
-  split. apply get_stat_bound. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves DCL instruction preserves WF invariant. *)
 Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
