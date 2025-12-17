@@ -5099,26 +5099,8 @@ Lemma set_prom_preserves_WF : forall s addr data,
   WF (set_prom_params s addr data true).
 Proof.
   intros s addr data HWF Haddr Hdata.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  unfold set_prom_params, WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF.
+  unfold set_prom_params, WF. simpl. rebuild_WF.
 Qed.
 
 (** Proves WPM preserves registers when enabled. *)
