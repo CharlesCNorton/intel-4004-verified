@@ -2137,6 +2137,8 @@ Ltac rebuild_WF :=
     | apply mod4096_bound
     | apply ram_read_main_bound; eassumption
     | apply get_stat_bound; eassumption
+    | eapply nth_Forall_lt; [eassumption | lia]
+    | apply Nat.mod_upper_bound; unfold NBANKS, NCHIPS, NREGS, NMAIN, NSTAT; lia
     | eassumption
     | assumption
     | lia
@@ -2854,28 +2856,7 @@ Proof. prove_WF_preservation. Qed.
 
 (** Proves LD execution preserves well-formedness. *)
 Lemma execute_LD_WF : forall s r, WF s -> instr_wf (LD r) -> WF (execute s (LD r)).
-Proof.
-  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. eapply nth_Forall_lt; eauto; lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves XCH execution preserves well-formedness. *)
 Lemma execute_XCH_WF : forall s r, WF s -> instr_wf (XCH r) -> WF (execute s (XCH r)).
@@ -3744,28 +3725,7 @@ Proof. prove_WF_preservation. Qed.
 
 (** Proves RDR instruction preserves WF invariant. *)
 Lemma execute_RDR_WF : forall s, WF s -> WF (execute s RDR).
-Proof.
-  intros s HWF. unfold execute, WF in *.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. eapply nth_Forall_lt; eauto; lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves ADM instruction preserves WF invariant. *)
 Lemma execute_ADM_WF : forall s, WF s -> WF (execute s ADM).
@@ -3789,28 +3749,7 @@ Proof. prove_WF_preservation. Qed.
 
 (** Proves DCL instruction preserves WF invariant. *)
 Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
-Proof.
-  intros s HWF. unfold execute, WF in *.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply Nat.mod_upper_bound. unfold NBANKS. lia.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Main preservation theorem: execute preserves WF for all well-formed instructions. *)
 Theorem execute_preserves_WF :
