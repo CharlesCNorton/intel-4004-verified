@@ -4785,6 +4785,48 @@ Lemma kbp_map_cases : forall s,
            end.
 Proof. intros; simpl; reflexivity. Qed.
 
+Lemma kbp_output_valid : forall s,
+  acc (execute s KBP) < 16.
+Proof.
+  intros s.
+  unfold execute. simpl.
+  destruct (acc s) as [|[|[|[|[|[|[|[|[|]]]]]]]]]; lia.
+Qed.
+
+Lemma kbp_single_bit_correct : forall s,
+  (acc s = 0 -> acc (execute s KBP) = 0) /\
+  (acc s = 1 -> acc (execute s KBP) = 1) /\
+  (acc s = 2 -> acc (execute s KBP) = 2) /\
+  (acc s = 4 -> acc (execute s KBP) = 3) /\
+  (acc s = 8 -> acc (execute s KBP) = 4).
+Proof.
+  intros s.
+  unfold execute; simpl.
+  repeat split; intro H; rewrite H; reflexivity.
+Qed.
+
+Lemma kbp_multi_bit_returns_15 : forall s,
+  acc s <> 0 -> acc s <> 1 -> acc s <> 2 -> acc s <> 4 -> acc s <> 8 ->
+  acc (execute s KBP) = 15.
+Proof.
+  intros s H0 H1 H2 H4 H8.
+  unfold execute. simpl.
+  destruct (acc s) as [|[|[|[|[|[|[|[|[|]]]]]]]]]; try contradiction; reflexivity.
+Qed.
+
+Lemma kbp_complete : forall n,
+  n < 16 ->
+  (n = 0 /\ 0 = 0) \/
+  (n = 1 /\ 1 = 1) \/
+  (n = 2 /\ 2 = 2) \/
+  (n = 4 /\ 3 = 3) \/
+  (n = 8 /\ 4 = 4) \/
+  (n <> 0 /\ n <> 1 /\ n <> 2 /\ n <> 4 /\ n <> 8 /\ 15 = 15).
+Proof.
+  intros n Hn.
+  destruct n as [|[|[|[|[|[|[|[|[|]]]]]]]]]; try lia; auto 10.
+Qed.
+
 (* ================== Simple end-to-end port sanity =================== *)
 
 (* After SRC selecting ROM port P and WRR, the ROM port P holds ACC. *)
