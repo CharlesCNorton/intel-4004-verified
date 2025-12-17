@@ -3021,24 +3021,7 @@ Proof.
       inversion H2; subst.
       inversion H4; subst.
       constructor; [apply addr12_bound | constructor; auto]. }
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. exact Hwfi.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  unfold WF. rebuild_WF.
 Qed.
 
 (** Proves JCN execution preserves well-formedness. *)
@@ -6403,167 +6386,62 @@ Qed.
 
 (* ==================== Encode range (bytes < 256) ==================== *)
 
-(* Helper lemma for arithmetic bounds *)
+(* General helper lemma for arithmetic bounds: base + n < 256 when n < 16. *)
+Lemma add_bound_general : forall base n, base + 15 < 256 -> n < 16 -> base + n < 256.
+Proof. intros. lia. Qed.
+
+(* Tactic to prove nullary instruction encode ranges. *)
+Ltac prove_encode_range_nullary :=
+  unfold encode, fst, snd; split; unfold lt; repeat constructor.
+
+(* Tactic to prove encode range with nibble argument. *)
+Ltac prove_encode_range_nibble base :=
+  unfold encode, fst, snd; split;
+  [ apply (add_bound_general base); [unfold lt; repeat constructor | apply Nat.mod_upper_bound; lia]
+  | unfold lt; repeat constructor ].
+
+(* Legacy helpers for backwards compatibility *)
 Lemma add_bound_32_256 : forall n, n < 16 -> 16 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (16 + n <= 16 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (16 + 15 = 31) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=31); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_48_256 : forall n, n < 16 -> 32 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (32 + n <= 32 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (32 + 15 = 47) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=47); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_64_256 : forall n, n < 16 -> 48 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (48 + n <= 48 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (48 + 15 = 63) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=63); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_80_256 : forall n, n < 16 -> 64 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (64 + n <= 64 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (64 + 15 = 79) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=79); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_96_256 : forall n, n < 16 -> 80 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (80 + n <= 80 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (80 + 15 = 95) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=95); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_112_256 : forall n, n < 16 -> 96 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (96 + n <= 96 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (96 + 15 = 111) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=111); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_128_256 : forall n, n < 16 -> 112 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (112 + n <= 112 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (112 + 15 = 127) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=127); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_144_256 : forall n, n < 16 -> 128 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (128 + n <= 128 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (128 + 15 = 143) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=143); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_160_256 : forall n, n < 16 -> 144 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (144 + n <= 144 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (144 + 15 = 159) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=159); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_176_256 : forall n, n < 16 -> 160 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (160 + n <= 160 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (160 + 15 = 175) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=175); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_192_256 : forall n, n < 16 -> 176 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (176 + n <= 176 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (176 + 15 = 191) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=191); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_208_256 : forall n, n < 16 -> 192 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (192 + n <= 192 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (192 + 15 = 207) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=207); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma add_bound_224_256 : forall n, n < 16 -> 208 + n < 256.
-Proof.
-  intros n Hn.
-  assert (n <= 15).
-  { unfold lt in Hn. apply Nat.succ_le_mono. exact Hn. }
-  assert (208 + n <= 208 + 15).
-  { apply Nat.add_le_mono_l. exact H. }
-  assert (208 + 15 = 223) by reflexivity.
-  rewrite H1 in H0.
-  apply Nat.le_lt_trans with (m:=223); [exact H0 | unfold lt; repeat constructor].
-Qed.
+Proof. intros. apply add_bound_general; [lia | exact H]. Qed.
 
 Lemma encode_NOP_range : fst (encode NOP) < 256 /\ snd (encode NOP) < 256.
-Proof.
-  unfold encode, fst, snd. split; unfold lt; repeat constructor.
-Qed.
+Proof. prove_encode_range_nullary. Qed.
 
 Lemma encode_JCN_range : forall n b,
   instr_wf (JCN n b) ->
@@ -6753,94 +6631,65 @@ Proof.
 Qed.
 
 Lemma encode_WRM_range : fst (encode WRM) < 256 /\ snd (encode WRM) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WMP_range : fst (encode WMP) < 256 /\ snd (encode WMP) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WRR_range : fst (encode WRR) < 256 /\ snd (encode WRR) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WPM_range : fst (encode WPM) < 256 /\ snd (encode WPM) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WR0_range : fst (encode WR0) < 256 /\ snd (encode WR0) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WR1_range : fst (encode WR1) < 256 /\ snd (encode WR1) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WR2_range : fst (encode WR2) < 256 /\ snd (encode WR2) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_WR3_range : fst (encode WR3) < 256 /\ snd (encode WR3) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_SBM_range : fst (encode SBM) < 256 /\ snd (encode SBM) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RDM_range : fst (encode RDM) < 256 /\ snd (encode RDM) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RDR_range : fst (encode RDR) < 256 /\ snd (encode RDR) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_ADM_range : fst (encode ADM) < 256 /\ snd (encode ADM) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RD0_range : fst (encode RD0) < 256 /\ snd (encode RD0) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RD1_range : fst (encode RD1) < 256 /\ snd (encode RD1) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RD2_range : fst (encode RD2) < 256 /\ snd (encode RD2) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RD3_range : fst (encode RD3) < 256 /\ snd (encode RD3) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_CLB_range : fst (encode CLB) < 256 /\ snd (encode CLB) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_CLC_range : fst (encode CLC) < 256 /\ snd (encode CLC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_IAC_range : fst (encode IAC) < 256 /\ snd (encode IAC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_CMC_range : fst (encode CMC) < 256 /\ snd (encode CMC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_CMA_range : fst (encode CMA) < 256 /\ snd (encode CMA) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RAL_range : fst (encode RAL) < 256 /\ snd (encode RAL) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_RAR_range : fst (encode RAR) < 256 /\ snd (encode RAR) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_TCC_range : fst (encode TCC) < 256 /\ snd (encode TCC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_DAC_range : fst (encode DAC) < 256 /\ snd (encode DAC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_TCS_range : fst (encode TCS) < 256 /\ snd (encode TCS) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_STC_range : fst (encode STC) < 256 /\ snd (encode STC) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_DAA_range : fst (encode DAA) < 256 /\ snd (encode DAA) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_KBP_range : fst (encode KBP) < 256 /\ snd (encode KBP) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
-
+Proof. prove_encode_range_nullary. Qed.
 Lemma encode_DCL_range : fst (encode DCL) < 256 /\ snd (encode DCL) < 256.
-Proof. unfold encode, fst, snd. split; unfold lt; repeat constructor. Qed.
+Proof. prove_encode_range_nullary. Qed.
 
 Lemma encode_range : forall i,
   instr_wf i ->
@@ -8967,12 +8816,6 @@ Qed.
 
    2. LOOP AND CONTROL FLOW VERIFICATION
 
-   PARTIALLY COMPLETE: We have verified an ISZ counting loop with 16
-   iterations (count_loop_full_verified). One helper lemma
-   (iterate_body_register_gen) remains admitted.
-
-   Remaining extensions:
-   - Complete the admitted modular arithmetic lemma
    - Compositional reasoning about nested control structures
    - Verification condition generation for structured programs
 
