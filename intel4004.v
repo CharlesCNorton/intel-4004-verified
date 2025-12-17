@@ -6625,6 +6625,122 @@ Proof.
     rewrite Hodd in Hdm. lia.
 Qed.
 
+(** FIM can load any 8-bit value into any of the 8 register pairs. *)
+Lemma fim_loads_byte_into_pair : forall s pair_idx data,
+  WF s ->
+  pair_idx < 8 ->
+  data < 256 ->
+  let r := 2 * pair_idx in
+  get_reg_pair (execute s (FIM r data)) r = data.
+Proof.
+  intros s pair_idx data HWF Hpair Hdata r.
+  subst r.
+  apply fim_operates_on_pairs.
+  - exact HWF.
+  - lia.
+  - rewrite Nat.mul_comm.
+    rewrite Nat.Div0.mod_mul.
+    reflexivity.
+  - exact Hdata.
+Qed.
+
+(** SRC decomposes pair value into RAM chip/reg/char addressing. *)
+Lemma src_addressing_decomposition : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 1 ->
+  let pair_val := get_reg_pair s r in
+  let s' := execute s (SRC r) in
+  sel_rom s' = pair_val / 16 /\
+  sel_chip (sel_ram s') = pair_val / 16 / 4 /\
+  sel_reg (sel_ram s') = (pair_val / 16) mod 4 /\
+  sel_char (sel_ram s') = pair_val mod 16.
+Proof.
+  intros s r HWF Hr Hodd pair_val s'.
+  subst pair_val s'.
+  apply src_uses_pair_value; assumption.
+Qed.
+
+(** The 8 register pairs cover all 16 registers exactly. *)
+Lemma register_pairs_partition : forall r,
+  r < 16 ->
+  exists pair_idx,
+    pair_idx < 8 /\
+    ((r = 2 * pair_idx /\ r mod 2 = 0) \/
+     (r = 2 * pair_idx + 1 /\ r mod 2 = 1)).
+Proof.
+  intros r Hr.
+  exists (r / 2).
+  assert (Hmod2: r mod 2 = 0 \/ r mod 2 = 1).
+  { pose proof (Nat.mod_upper_bound r 2). lia. }
+  destruct Hmod2 as [Heven | Hodd].
+  - split.
+    + apply Nat.Div0.div_lt_upper_bound; lia.
+    + left. split.
+      * pose proof (Nat.div_mod r 2) as Hdm.
+        assert (2 <> 0) by lia.
+        specialize (Hdm H).
+        rewrite Heven in Hdm. lia.
+      * exact Heven.
+  - split.
+    + apply Nat.Div0.div_lt_upper_bound; lia.
+    + right. split.
+      * pose proof (Nat.div_mod r 2) as Hdm.
+        assert (2 <> 0) by lia.
+        specialize (Hdm H).
+        rewrite Hodd in Hdm. lia.
+      * exact Hodd.
+Qed.
+
+(** Register pair value decomposes into high and low nibbles. *)
+Lemma pair_value_decomposition : forall s r,
+  WF s ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg s r * 16 + get_reg s (r + 1).
+Proof.
+  intros s r HWF Hr Heven.
+  destruct HWF as [Hlen [Hall _]].
+  apply get_reg_pair_split; assumption.
+Qed.
+
+(** Loading and then using a pair for SRC is consistent. *)
+Lemma fim_then_src_consistent : forall s pair_idx data,
+  WF s ->
+  pair_idx < 8 ->
+  data < 256 ->
+  let r_even := 2 * pair_idx in
+  let r_odd := 2 * pair_idx + 1 in
+  let s1 := execute s (FIM r_even data) in
+  let s2 := execute s1 (SRC r_odd) in
+  sel_rom s2 = data / 16 /\
+  sel_char (sel_ram s2) = data mod 16.
+Proof.
+  intros s pair_idx data HWF Hpair Hdata r_even r_odd s1 s2.
+  subst r_even r_odd s1 s2.
+  assert (Hr_even: 2 * pair_idx < 16) by lia.
+  assert (Hr_odd: 2 * pair_idx + 1 < 16) by lia.
+  assert (Heven: (2 * pair_idx) mod 2 = 0).
+  { rewrite Nat.mul_comm. rewrite Nat.Div0.mod_mul. reflexivity. }
+  assert (Hodd: (2 * pair_idx + 1) mod 2 = 1).
+  { rewrite Nat.add_mod by lia.
+    rewrite Nat.mul_comm.
+    rewrite Nat.Div0.mod_mul.
+    simpl. reflexivity. }
+  assert (HWF1: WF (execute s (FIM (2 * pair_idx) data))).
+  { apply execute_FIM_WF.
+    - exact HWF.
+    - unfold instr_wf. repeat split; [lia | exact Heven | exact Hdata]. }
+  assert (Hpair_val: get_reg_pair (execute s (FIM (2 * pair_idx) data)) (2 * pair_idx) = data).
+  { apply fim_operates_on_pairs; [exact HWF | exact Hr_even | exact Heven | exact Hdata]. }
+  assert (Hpair_val': get_reg_pair (execute s (FIM (2 * pair_idx) data)) (2 * pair_idx + 1) = data).
+  { rewrite <- even_reg_same_pair_as_successor by exact Heven. exact Hpair_val. }
+  pose proof (src_uses_pair_value (execute s (FIM (2 * pair_idx) data)) (2 * pair_idx + 1) HWF1 Hr_odd Hodd) as Hsrc.
+  destruct Hsrc as [Hrom [_ [_ Hchar]]].
+  rewrite Hpair_val' in Hrom, Hchar.
+  split; [exact Hrom | exact Hchar].
+Qed.
+
 (* ==================== Encode range (bytes < 256) ==================== *)
 
 (* General helper lemma for arithmetic bounds: base + n < 256 when n < 16. *)
@@ -9043,7 +9159,7 @@ Qed.
    [X] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
    [X] 3.  Invariants relating even/odd-indexed register behavior
    [X] 4.  Proof that odd/even register interference handled across all instructions
-   [ ] 5.  Formal treatment of addressing modes using register pairs
+   [X] 5.  Formal treatment of addressing modes using register pairs
    [ ] 6.  Page boundary crossing behavior for page_of
    [ ] 7.  RAM banking model proof of cross-bank isolation
    [ ] 8.  Atomicity or single-writer semantics for memory operations
