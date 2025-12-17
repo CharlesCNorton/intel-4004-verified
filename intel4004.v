@@ -1702,6 +1702,7 @@ Ltac rebuild_WF :=
     | apply mod256_bound
     | apply mod4096_bound
     | assumption
+    | lia
     | split ]).
 
 (** Combined tactic: unfolds execute/WF, destructs, simulates, rebuilds. *)
@@ -2846,28 +2847,7 @@ Qed.
 
 (** Proves LDM execution preserves well-formedness. *)
 Lemma execute_LDM_WF : forall s n, WF s -> instr_wf (LDM n) -> WF (execute s (LDM n)).
-Proof.
-  intros s n HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves LD execution preserves well-formedness. *)
 Lemma execute_LD_WF : forall s r, WF s -> instr_wf (LD r) -> WF (execute s (LD r)).
@@ -2958,394 +2938,74 @@ Qed.
 
 (** Proves ADD execution preserves well-formedness. *)
 Lemma execute_ADD_WF : forall s r, WF s -> instr_wf (ADD r) -> WF (execute s (ADD r)).
-Proof.
-  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves SUB execution preserves well-formedness. *)
 Lemma execute_SUB_WF : forall s r, WF s -> instr_wf (SUB r) -> WF (execute s (SUB r)).
-Proof.
-  intros s r HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves IAC execution preserves well-formedness. *)
 Lemma execute_IAC_WF : forall s, WF s -> WF (execute s IAC).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves DAC execution preserves well-formedness. *)
 Lemma execute_DAC_WF : forall s, WF s -> WF (execute s DAC).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves CLC execution preserves well-formedness. *)
 Lemma execute_CLC_WF : forall s, WF s -> WF (execute s CLC).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves STC execution preserves well-formedness. *)
 Lemma execute_STC_WF : forall s, WF s -> WF (execute s STC).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves CMC execution preserves well-formedness. *)
 Lemma execute_CMC_WF : forall s, WF s -> WF (execute s CMC).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves CMA execution preserves well-formedness. *)
 Lemma execute_CMA_WF : forall s, WF s -> WF (execute s CMA).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves CLB execution preserves well-formedness. *)
 Lemma execute_CLB_WF : forall s, WF s -> WF (execute s CLB).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RAL execution preserves well-formedness. *)
 Lemma execute_RAL_WF : forall s, WF s -> WF (execute s RAL).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves RAR execution preserves well-formedness. *)
 Lemma execute_RAR_WF : forall s, WF s -> WF (execute s RAR).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves TCC execution preserves well-formedness. *)
 Lemma execute_TCC_WF : forall s, WF s -> WF (execute s TCC).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. destruct (carry s); lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF.
+  rebuild_WF; destruct (carry s); lia.
 Qed.
 
 (** Proves TCS execution preserves well-formedness. *)
 Lemma execute_TCS_WF : forall s, WF s -> WF (execute s TCS).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. destruct (carry s); lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF.
+  rebuild_WF; destruct (carry s); lia.
 Qed.
 
 (** Proves DAA execution preserves well-formedness. *)
 Lemma execute_DAA_WF : forall s, WF s -> WF (execute s DAA).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. apply nibble_lt16.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves KBP execution preserves well-formedness. *)
 Lemma execute_KBP_WF : forall s, WF s -> WF (execute s KBP).
 Proof.
   intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split.
-    { assert (H: acc s < 16) by exact Hacc.
-      destruct (acc s) eqn:E; simpl; [lia|].
-      destruct n eqn:E1; simpl; [lia|].
-      destruct n0 eqn:E2; simpl; [lia|].
-      destruct n1 eqn:E3; simpl; [lia|].
-      destruct n2 eqn:E4; simpl; [lia|].
-      destruct n3 eqn:E5; simpl; [lia|].
-      destruct n4 eqn:E6; simpl; [lia|].
-      destruct n5 eqn:E7; simpl; [lia|].
-      destruct n6 eqn:E8; simpl; [lia|].
-      destruct n7 eqn:E9; simpl; [lia|].
-      destruct n8 eqn:E10; simpl; [lia|].
-      destruct n9 eqn:E11; simpl; [lia|].
-      destruct n10 eqn:E12; simpl; [lia|].
-      destruct n11 eqn:E13; simpl; [lia|].
-      destruct n12 eqn:E14; simpl; [lia|].
-      subst. simpl in H. lia. }
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF.
+  rebuild_WF; destruct (acc s) as [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|[|]]]]]]]]]]]]]]]]; lia.
 Qed.
 
 (** Proves JUN execution preserves well-formedness. *)
