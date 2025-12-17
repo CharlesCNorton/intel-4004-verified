@@ -694,6 +694,34 @@ Definition instr_wf (i:Instruction) : Prop :=
   | _ => True
   end.
 
+(** Witness: NOP is trivially well-formed. *)
+Lemma instr_wf_NOP : instr_wf NOP.
+Proof. exact I. Qed.
+
+(** Witness: LDM 5 is well-formed. *)
+Lemma instr_wf_LDM_5 : instr_wf (LDM 5).
+Proof. unfold instr_wf. lia. Qed.
+
+(** Witness: FIM with even register is well-formed. *)
+Lemma instr_wf_FIM_0_42 : instr_wf (FIM 0 42).
+Proof. unfold instr_wf. repeat split; lia. Qed.
+
+(** Counterexample: FIM with odd register violates instr_wf. *)
+Lemma instr_wf_FIM_odd_rejected : ~ instr_wf (FIM 1 42).
+Proof. unfold instr_wf. intros [_ [Hmod _]]. simpl in Hmod. discriminate. Qed.
+
+(** Counterexample: LDM with value >= 16 violates instr_wf. *)
+Lemma instr_wf_LDM_overflow_rejected : ~ instr_wf (LDM 16).
+Proof. unfold instr_wf. lia. Qed.
+
+(** Counterexample: JUN with address >= 4096 violates instr_wf. *)
+Lemma instr_wf_JUN_overflow_rejected : ~ instr_wf (JUN 4096).
+Proof. unfold instr_wf. lia. Qed.
+
+(** Counterexample: SRC with even register violates instr_wf. *)
+Lemma instr_wf_SRC_even_rejected : ~ instr_wf (SRC 0).
+Proof. unfold instr_wf. intros [_ Hmod]. simpl in Hmod. discriminate. Qed.
+
 (** Proves n - n mod 2 = n when n is even. *)
 Lemma even_sub_mod : forall n, n mod 2 = 0 -> n - n mod 2 = n.
 Proof.
@@ -1715,6 +1743,58 @@ Proof.
   split. reflexivity.
   split. simpl; lia.
   simpl; lia.
+Qed.
+
+(** Counterexample: state with wrong register count violates WF. *)
+Definition bad_state_wrong_reg_count : Intel4004State :=
+  mkState 0 (repeat 0 8) false 0 [] empty_sys 0 (mkRAMSel 0 0 0)
+          (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
+
+Lemma bad_state_wrong_reg_count_not_WF : ~ WF bad_state_wrong_reg_count.
+Proof.
+  unfold WF, bad_state_wrong_reg_count.
+  intros [Hlen _].
+  simpl in Hlen.
+  discriminate.
+Qed.
+
+(** Counterexample: state with accumulator out of bounds violates WF. *)
+Definition bad_state_acc_overflow : Intel4004State :=
+  mkState 99 (repeat 0 16) false 0 [] empty_sys 0 (mkRAMSel 0 0 0)
+          (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
+
+Lemma bad_state_acc_overflow_not_WF : ~ WF bad_state_acc_overflow.
+Proof.
+  unfold WF, bad_state_acc_overflow.
+  intros [_ [_ [Hacc _]]].
+  simpl in Hacc.
+  lia.
+Qed.
+
+(** Counterexample: state with PC out of bounds violates WF. *)
+Definition bad_state_pc_overflow : Intel4004State :=
+  mkState 0 (repeat 0 16) false 4096 [] empty_sys 0 (mkRAMSel 0 0 0)
+          (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
+
+Lemma bad_state_pc_overflow_not_WF : ~ WF bad_state_pc_overflow.
+Proof.
+  unfold WF, bad_state_pc_overflow.
+  intros [_ [_ [_ [Hpc _]]]].
+  simpl in Hpc.
+  lia.
+Qed.
+
+(** Counterexample: state with stack too deep violates WF. *)
+Definition bad_state_stack_overflow : Intel4004State :=
+  mkState 0 (repeat 0 16) false 0 [0;0;0;0] empty_sys 0 (mkRAMSel 0 0 0)
+          (repeat 0 16) 0 (repeat 0 4096) false 0 0 false.
+
+Lemma bad_state_stack_overflow_not_WF : ~ WF bad_state_stack_overflow.
+Proof.
+  unfold WF, bad_state_stack_overflow.
+  intros [_ [_ [_ [_ [Hstk _]]]]].
+  simpl in Hstk.
+  lia.
 Qed.
 
 (** Proves reset_state preserves WF invariant. *)
@@ -8529,76 +8609,37 @@ Proof.
 Qed.
 
 (* ===================================================================== *)
-(*                         FUTURE WORK: TODO                             *)
+(*                         VERIFICATION ROADMAP                          *)
 (* ===================================================================== *)
 
 (*
-   This formalization provides a complete, verified model of the Intel
-   4004 microprocessor with full soundness guarantees and proven safety
-   properties. Several avenues remain open for extending this work.
-
-
-   1. REGISTER PAIR SEMANTICS
-
-   The 4004's architecture organizes its 16 registers as 8 register pairs,
-   and several critical instructions (FIM, SRC, FIN, JIN) operate on pairs.
-
-   Future work should establish:
-   - Complete algebraic laws for get_reg_pair and set_reg_pair
-   - Invariants relating even-indexed and odd-indexed register behavior
-   - Formal treatment of addressing modes using register pairs
-
-
-   2. LOOP AND CONTROL FLOW VERIFICATION
-
-   - Compositional reasoning about nested control structures
-   - Verification condition generation for structured programs
-
-
-   3. END-TO-END PROGRAM VERIFICATION
-
-   PARTIALLY COMPLETE: The ISZ counting loop (count_loop_init through
-   count_loop_full_verified) demonstrates end-to-end verification of a
-   complete program with initialization, loop body, and termination proof.
-
-   Additional candidate programs to verify:
-   - Multi-byte BCD addition (requires ADD, DAA, carry propagation)
-   - Memory block copy routine (FIM, SRC, RDM, WRM, ISZ termination)
-   - I/O port scanning (using wrr_rdr_roundtrip infrastructure)
-   - Subroutine call/return sequences (JMS, BBL with data passing)
-
-
-   4. WEAKEST PRECONDITION CALCULUS
-
-   Remaining work:
-   - Forward symbolic execution: derive strongest postconditions
-   - Backward verification condition propagation
-   - Full separation logic for RAM with separating conjunction
-   - Automated tactics for common verification patterns
-
-
-   5. TIMING AND RESOURCE ANALYSIS
-
-   We have proven cycle counts (8/16/24 cycles per instruction) but lack:
-   - Worst-case execution time (WCET) analysis for program fragments
-   - Best-case execution time (BCET) for optimization validation
-   - Formal relationship between cycle counts and real-time deadlines
-
-
-   6. HARDWARE REFINEMENT
-
-   This model operates at the instruction set architecture (ISA) level.
-   Deeper verification could establish refinement to:
-   - Register-transfer level (RTL) microarchitecture model
-   - Gate-level netlist (for formal equivalence checking)
-
-
-   7. COMPILER CORRECTNESS
-
-   Prove that a compiler from a higher-level language to 4004 machine
-   code preserves semantics:
-   - Source language operational semantics
-   - Compilation function from source to 4004 instructions
-   - Theorem: compiled program behaviors refine source behaviors
+   [X] 1.  Concrete witness/counterexample pairs for definitions
+   [ ] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
+   [ ] 3.  Invariants relating even/odd-indexed register behavior
+   [ ] 4.  Proof that odd/even register interference handled across all instructions
+   [ ] 5.  Formal treatment of addressing modes using register pairs
+   [ ] 6.  Page boundary crossing behavior for page_of
+   [ ] 7.  RAM banking model proof of cross-bank isolation
+   [ ] 8.  Atomicity or single-writer semantics for memory operations
+   [ ] 9.  Systematic coverage of instruction sequences that could corrupt state
+   [ ] 10. Full separation logic for RAM with separating conjunction
+   [ ] 11. Loop invariant reasoning for nested loops and arbitrary invariants
+   [ ] 12. Compositional reasoning about nested control structures
+   [ ] 13. Verification condition generation for structured programs
+   [ ] 14. Forward symbolic execution: derive strongest postconditions
+   [ ] 15. Backward verification condition propagation
+   [ ] 16. Automated tactics for common verification patterns
+   [ ] 17. Multi-byte BCD addition (ADD, DAA, carry propagation)
+   [ ] 18. Memory block copy routine (FIM, SRC, RDM, WRM, ISZ termination)
+   [ ] 19. I/O port scanning (using wrr_rdr_roundtrip infrastructure)
+   [ ] 20. Subroutine call/return sequences (JMS, BBL with data passing)
+   [ ] 21. Worst-case execution time (WCET) analysis for program fragments
+   [ ] 22. Best-case execution time (BCET) for optimization validation
+   [ ] 23. Formal relationship between cycle counts and real-time deadlines
+   [ ] 24. Register-transfer level (RTL) microarchitecture model
+   [ ] 25. Gate-level netlist (for formal equivalence checking)
+   [ ] 26. Source language operational semantics
+   [ ] 27. Compilation function from source to 4004 instructions
+   [ ] 28. Compiled program behaviors refine source behaviors
 *)
 
