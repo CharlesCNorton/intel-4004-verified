@@ -6020,6 +6020,96 @@ Proof.
   exact Heven.
 Qed.
 
+(** Setting the same pair twice uses only the final value. *)
+Lemma set_reg_pair_idempotent : forall s r v1 v2,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v2 < 256 ->
+  get_reg_pair (set_reg_pair (set_reg_pair s r v1) r v2) r = v2.
+Proof.
+  intros s r v1 v2 Hlen Hr Heven Hv2.
+  apply set_reg_pair_get_pair.
+  - repeat rewrite set_reg_pair_preserves_length.
+    exact Hlen.
+  - exact Hr.
+  - exact Heven.
+  - exact Hv2.
+Qed.
+
+(** Setting different pairs commutes. *)
+Lemma set_reg_pair_commute : forall s r1 r2 v1 v2,
+  length (regs s) = 16 ->
+  r1 < 16 ->
+  r2 < 16 ->
+  r1 mod 2 = 0 ->
+  r2 mod 2 = 0 ->
+  r1 <> r2 ->
+  v1 < 256 ->
+  v2 < 256 ->
+  get_reg_pair (set_reg_pair (set_reg_pair s r1 v1) r2 v2) r1 = v1 /\
+  get_reg_pair (set_reg_pair (set_reg_pair s r1 v1) r2 v2) r2 = v2.
+Proof.
+  intros s r1 r2 v1 v2 Hlen Hr1 Hr2 Heven1 Heven2 Hneq Hv1 Hv2.
+  assert (Hlen1: length (regs (set_reg_pair s r1 v1)) = 16).
+  { rewrite set_reg_pair_preserves_length. exact Hlen. }
+  assert (Hlen2: length (regs (set_reg_pair (set_reg_pair s r1 v1) r2 v2)) = 16).
+  { rewrite set_reg_pair_preserves_length. exact Hlen1. }
+  split.
+  - rewrite set_reg_pair_preserves_other_pairs by auto.
+    apply set_reg_pair_get_pair; auto.
+  - apply set_reg_pair_get_pair; auto.
+Qed.
+
+(** Initial state has all register pairs set to 0. *)
+Lemma get_reg_pair_init_state : forall r,
+  r < 16 ->
+  get_reg_pair init_state r = 0.
+Proof.
+  intros r Hr.
+  unfold get_reg_pair, get_reg, init_state.
+  simpl.
+  do 16 (destruct r; [simpl; reflexivity |]).
+  lia.
+Qed.
+
+(** Setting a pair then reading individual registers. *)
+Lemma set_reg_pair_get_reg_high : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v < 256 ->
+  get_reg (set_reg_pair s r v) r = v / 16.
+Proof.
+  intros s r v Hlen Hr Heven Hv.
+  destruct (set_reg_pair_get_components s r v Hlen Hr Heven Hv) as [Hhi _].
+  exact Hhi.
+Qed.
+
+Lemma set_reg_pair_get_reg_low : forall s r v,
+  length (regs s) = 16 ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  v < 256 ->
+  get_reg (set_reg_pair s r v) (r + 1) = v mod 16.
+Proof.
+  intros s r v Hlen Hr Heven Hv.
+  destruct (set_reg_pair_get_components s r v Hlen Hr Heven Hv) as [_ Hlo].
+  exact Hlo.
+Qed.
+
+(** Reading individual registers then forming a pair. *)
+Lemma get_reg_pair_from_regs : forall s r,
+  length (regs s) = 16 ->
+  Forall (fun x => x < 16) (regs s) ->
+  r < 16 ->
+  r mod 2 = 0 ->
+  get_reg_pair s r = get_reg s r * 16 + get_reg s (r + 1).
+Proof.
+  intros s r Hlen Hall Hr Heven.
+  apply get_reg_pair_split; assumption.
+Qed.
+
 Lemma pair_index_normalization : forall r,
   r - r mod 2 = r - r mod 2.
 Proof.
@@ -8614,7 +8704,7 @@ Qed.
 
 (*
    [X] 1.  Concrete witness/counterexample pairs for definitions
-   [ ] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
+   [X] 2.  Complete algebraic laws for get_reg_pair and set_reg_pair
    [ ] 3.  Invariants relating even/odd-indexed register behavior
    [ ] 4.  Proof that odd/even register interference handled across all instructions
    [ ] 5.  Formal treatment of addressing modes using register pairs
