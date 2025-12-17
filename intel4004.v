@@ -2797,53 +2797,11 @@ Qed.
 (** Proves NOP preserves well-formedness invariant. *)
 Lemma execute_NOP_preserves_WF : forall s,
   WF s -> WF (execute s NOP).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.  (* length regs = 16 *)
-  split. assumption.  (* Forall < 16 regs *)
-  split. assumption.  (* acc < 16 *)
-  split. apply addr12_bound.  (* pc < 4096 *)
-  split. assumption.  (* stack length <= 3 *)
-  split. assumption.  (* Forall < 4096 stack *)
-  split. assumption.  (* ram_sys length = NBANKS *)
-  split. assumption.  (* Forall WF_bank ram_sys *)
-  split. assumption.  (* cur_bank < NBANKS *)
-  split. assumption.  (* WF_sel sel_ram *)
-  split. assumption.  (* rom_ports length = 16 *)
-  split. assumption.  (* Forall < 16 rom_ports *)
-  split. assumption.  (* sel_rom < 16 *)
-  split. assumption.  (* Forall < 256 rom *)
-  split. assumption.  (* rom length = 4096 *)
-  split. assumption.  (* prom_addr < 4096 *)
-  assumption.  (* prom_data < 256 *)
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves NOP execution preserves well-formedness. *)
 Lemma execute_NOP_WF : forall s, WF s -> WF (execute s NOP).
-Proof.
-  intros s HWF. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
-Qed.
+Proof. prove_WF_preservation. Qed.
 
 (** Proves LDM execution preserves well-formedness. *)
 Lemma execute_LDM_WF : forall s n, WF s -> instr_wf (LDM n) -> WF (execute s (LDM n)).
@@ -3100,8 +3058,7 @@ Qed.
 Lemma execute_JCN_WF : forall s c a, WF s -> instr_wf (JCN c a) -> WF (execute s (JCN c a)).
 Proof.
   intros s c a HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (c1 := c / 8).
   set (c2 := (c / 4) mod 2).
   set (c3 := (c / 2) mod 2).
@@ -3110,43 +3067,7 @@ Proof.
                         (orb (andb (carry s) (c3 =? 1))
                              (andb (negb (test_pin s)) (c4 =? 1)))).
   set (jump := if c1 =? 1 then negb base_cond else base_cond).
-  destruct jump.
-  - unfold WF. simpl.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
-  - unfold WF. simpl.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
+  destruct jump; unfold WF; simpl; rebuild_WF.
 Qed.
 
 Lemma execute_FIM_WF : forall s r d, WF s -> instr_wf (FIM r d) -> WF (execute s (FIM r d)).
