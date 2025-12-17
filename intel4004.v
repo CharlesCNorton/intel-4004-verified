@@ -1039,6 +1039,40 @@ Proof.
   destruct H as [H|[H|[H|[H|[H|[H|[H|H]]]]]]]; subst; reflexivity.
 Qed.
 
+(** Helper for nibble-argument decode proofs: (base + n) / 16 = q and (base + n) mod 16 = n. *)
+Lemma decode_nibble_helper : forall base n q,
+  n < 16 -> base = q * 16 -> base + 15 < 256 ->
+  (base + n) / 16 = q /\ (base + n) mod 16 = n.
+Proof.
+  intros base n q Hn Hbase Hbound.
+  split.
+  - symmetry. apply Nat.div_unique with (r := n). lia. lia.
+  - symmetry. apply Nat.mod_unique with (q := q). lia. lia.
+Qed.
+
+(** Helper for 12-bit address decode proofs (JUN/JMS). *)
+Lemma decode_addr12_helper : forall a,
+  a < 4096 -> a / 256 < 16 /\ a / 256 mod 16 = a / 256.
+Proof.
+  intros a Ha.
+  assert (Hdiv: a / 256 < 16).
+  { apply Nat.Div0.div_lt_upper_bound. lia. }
+  split. exact Hdiv. apply Nat.mod_small. exact Hdiv.
+Qed.
+
+(** Tactic for simple nibble-argument instruction decode proofs. *)
+Ltac solve_nibble_decode base quot :=
+  unfold decode;
+  match goal with
+  | [ Hwf : ?n < 16 |- _ ] =>
+    let Hmod := fresh "Hmod" in
+    let Hdiv := fresh "Hdiv" in
+    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf);
+    rewrite Hmod;
+    pose proof (decode_nibble_helper base n quot Hwf eq_refl ltac:(lia)) as [Hdiv Hmod'];
+    rewrite Hdiv, Hmod'; reflexivity
+  end.
+
 (** Main encode-decode bijection theorem: decode (encode i) = i for all well-formed instructions. *)
 Lemma decode_encode_id : forall i, instr_wf i -> let '(b1,b2) := encode i in decode b1 b2 = i.
 Proof.
@@ -1046,12 +1080,8 @@ Proof.
   - (* JCN *) destruct Hwf as [Hc Ha].
     change (decode (16 + n) (b mod 256) = JCN n b).
     unfold decode.
-    assert (E1: (16 + n) / 16 = 1).
-    { symmetry. apply (Nat.div_unique (16 + n) 16 1 n); lia. }
-    assert (E2: (16 + n) mod 16 = n).
-    { symmetry. apply (Nat.mod_unique (16 + n) 16 1 n); lia. }
+    pose proof (decode_nibble_helper 16 n 1 Hc eq_refl ltac:(lia)) as [E1 E2].
     rewrite E1, E2.
-    change (JCN n (b mod 256) = JCN n b).
     f_equal. apply Nat.mod_small. assumption.
   - (* FIM *) destruct Hwf as (Hr & Hev & Hd).
     apply fim_encode_decode; assumption.
@@ -1065,180 +1095,69 @@ Proof.
     change (decode (64 + (a / 256 mod 16)) (a mod 256) = JUN a).
     unfold decode.
     pose proof (jun_jms_encode_helper a Hwf) as [H1 [H2 [H3 H4]]].
-    assert (HMod: a / 256 mod 16 = a / 256).
-    { apply Nat.mod_small.
-      assert (HDivLt: a / 256 < 16).
-      { assert (Ha4096: a < 4096) by exact Hwf.
-        destruct (le_lt_dec 16 (a / 256)) as [HGe16|HLt16]; [|exact HLt16].
-        exfalso.
-        assert (HContra: 4096 <= 256 * (a / 256)).
-        { replace 4096 with (256 * 16) by reflexivity.
-          apply Nat.mul_le_mono_l. exact HGe16. }
-        assert (HMulDiv: 256 * (a / 256) <= a).
-        { pose proof (Nat.div_mod a 256) as HDivMod.
-          assert (H256Nz: 256 <> 0) by lia.
-          specialize (HDivMod H256Nz).
-          assert (HEq: a = 256 * (a / 256) + a mod 256) by exact HDivMod.
-          rewrite HEq.
-          assert (a mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
-          lia. }
-        lia. }
-      exact HDivLt. }
-    rewrite HMod.
-    unfold decode.
-    rewrite H1.
-    rewrite H2.
-    f_equal.
-    unfold addr12_of_nat.
-    assert (HDecomp: (a / 256) * 256 + a mod 256 = a).
-    { pose proof (divmod_representation a) as Hdm.
-      rewrite Nat.mul_comm in Hdm.
-      symmetry. exact Hdm. }
-    rewrite HDecomp.
-    apply Nat.mod_small.
-    exact Hwf.
+    pose proof (decode_addr12_helper a Hwf) as [_ HMod].
+    rewrite HMod, H1, H2. f_equal. unfold addr12_of_nat.
+    assert (Hdm: (a / 256) * 256 + a mod 256 = a).
+    { pose proof (divmod_representation a). lia. }
+    rewrite Hdm. apply Nat.mod_small. exact Hwf.
   - (* JMS *)
     change (decode (80 + (a / 256 mod 16)) (a mod 256) = JMS a).
     unfold decode.
     pose proof (jun_jms_encode_helper a Hwf) as [H1 [H2 [H3 H4]]].
-    assert (HMod: a / 256 mod 16 = a / 256).
-    { apply Nat.mod_small.
-      assert (HDivLt: a / 256 < 16).
-      { assert (Ha4096: a < 4096) by exact Hwf.
-        destruct (le_lt_dec 16 (a / 256)) as [HGe16|HLt16]; [|exact HLt16].
-        exfalso.
-        assert (HContra: 4096 <= 256 * (a / 256)).
-        { replace 4096 with (256 * 16) by reflexivity.
-          apply Nat.mul_le_mono_l. exact HGe16. }
-        assert (HMulDiv: 256 * (a / 256) <= a).
-        { pose proof (Nat.div_mod a 256) as HDivMod.
-          assert (H256Nz: 256 <> 0) by lia.
-          specialize (HDivMod H256Nz).
-          assert (HEq: a = 256 * (a / 256) + a mod 256) by exact HDivMod.
-          rewrite HEq.
-          assert (a mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
-          lia. }
-        lia. }
-      exact HDivLt. }
-    rewrite HMod.
-    rewrite H3.
-    rewrite H4.
-    f_equal.
-    unfold addr12_of_nat.
-    assert (HDecomp: (a / 256) * 256 + a mod 256 = a).
-    { pose proof (divmod_representation a) as Hdm.
-      rewrite Nat.mul_comm in Hdm.
-      symmetry. exact Hdm. }
-    rewrite HDecomp.
-    apply Nat.mod_small.
-    exact Hwf.
+    pose proof (decode_addr12_helper a Hwf) as [_ HMod].
+    rewrite HMod, H3, H4. f_equal. unfold addr12_of_nat.
+    assert (Hdm: (a / 256) * 256 + a mod 256 = a).
+    { pose proof (divmod_representation a). lia. }
+    rewrite Hdm. apply Nat.mod_small. exact Hwf.
   - (* INC *)
     change (decode (96 + n mod 16) 0 = INC n).
     unfold decode.
-    assert (H_div: (96 + n mod 16) / 16 = 6).
-    { assert (Hmod_small: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-      rewrite Hmod_small.
-      assert (96 + n < 112) by lia.
-      assert (96 <= 96 + n) by lia.
-      symmetry.
-      apply Nat.div_unique with (r := n).
-      - lia.
-      - reflexivity. }
-    assert (H_mod: (96 + n mod 16) mod 16 = n mod 16).
-    { assert (Hmod_small: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-      rewrite Hmod_small.
-      symmetry.
-      apply Nat.mod_unique with (q := 6).
-      - lia.
-      - reflexivity. }
-    rewrite H_div, H_mod.
-    change (INC (n mod 16) = INC n).
-    f_equal.
-    apply Nat.mod_small. exact Hwf.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 96 n 6 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* ISZ *)
     destruct Hwf as [Hr Hb].
     change (decode (112 + n mod 16) (b mod 256) = ISZ n b).
     unfold decode.
-    assert (H_div: (112 + n mod 16) / 16 = 7).
-    { assert (n mod 16 = n) by (apply Nat.mod_small; exact Hr).
-      rewrite H.
-      symmetry. apply Nat.div_unique with (r := n); lia. }
-    assert (H_mod: (112 + n mod 16) mod 16 = n mod 16).
-    { assert (n mod 16 = n) by (apply Nat.mod_small; exact Hr).
-      rewrite H.
-      symmetry.
-      apply Nat.mod_unique with (q := 7); lia. }
-    rewrite H_div, H_mod.
-    change (ISZ (n mod 16) (b mod 256) = ISZ n b).
-    f_equal.
-    + apply Nat.mod_small. exact Hr.
-    + apply Nat.mod_small. exact Hb.
+    rewrite (Nat.mod_small n 16 Hr).
+    pose proof (decode_nibble_helper 112 n 7 Hr eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. f_equal. apply Nat.mod_small. exact Hb.
   - (* ADD *)
     change (decode (128 + n mod 16) 0 = ADD n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (128 + n) / 16 = 8) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (128 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 8); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 128 n 8 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* SUB *)
     change (decode (144 + n mod 16) 0 = SUB n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (144 + n) / 16 = 9) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (144 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 9); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 144 n 9 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* LD *)
     change (decode (160 + n mod 16) 0 = LD n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (160 + n) / 16 = 10) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (160 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 10); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 160 n 10 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* XCH *)
     change (decode (176 + n mod 16) 0 = XCH n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (176 + n) / 16 = 11) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (176 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 11); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 176 n 11 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* BBL *)
     change (decode (192 + n mod 16) 0 = BBL n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (192 + n) / 16 = 12) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (192 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 12); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 192 n 12 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
   - (* LDM *)
     change (decode (208 + n mod 16) 0 = LDM n).
     unfold decode.
-    assert (Hmod: n mod 16 = n) by (apply Nat.mod_small; exact Hwf).
-    rewrite Hmod.
-    assert (H_div: (208 + n) / 16 = 13) by (symmetry; apply Nat.div_unique with (r := n); lia).
-    assert (H_mod: (208 + n) mod 16 = n).
-    { symmetry.
-      apply Nat.mod_unique with (q := 13); lia. }
-    rewrite H_div, H_mod.
-    reflexivity.
+    rewrite (Nat.mod_small n 16 Hwf).
+    pose proof (decode_nibble_helper 208 n 13 Hwf eq_refl ltac:(lia)) as [Hd Hm].
+    rewrite Hd, Hm. reflexivity.
 Qed.
 
 (** Proves encode is canonical for decoded well-formed instructions. *)
