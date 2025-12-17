@@ -3749,7 +3749,31 @@ Proof. prove_WF_preservation. Qed.
 
 (** Proves DCL instruction preserves WF invariant. *)
 Lemma execute_DCL_WF : forall s, WF s -> WF (execute s DCL).
-Proof. prove_WF_preservation. Qed.
+Proof.
+  intros s H.
+  unfold execute, WF in *. simpl.
+  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  split. exact HlenR.
+  split. exact HforR.
+  split. exact Hacc.
+  split. apply addr12_bound.
+  split. exact Hstklen.
+  split. exact HstkFor.
+  split. exact HsysLen.
+  split. exact HsysFor.
+  split.
+  { assert (Hmod: acc s mod NBANKS < NBANKS) by (apply Nat.mod_upper_bound; unfold NBANKS; lia).
+    unfold NBANKS in Hmod. unfold NBANKS. exact Hmod. }
+  split. exact Hsel.
+  split. exact HrpLen.
+  split. exact HrpFor.
+  split. exact Hselrom.
+  split. exact HromFor.
+  split. exact HromLen.
+  split. exact Hpaddr.
+  exact Hpdata.
+Qed.
 
 (** Main preservation theorem: execute preserves WF for all well-formed instructions. *)
 Theorem execute_preserves_WF :
@@ -8993,7 +9017,25 @@ Lemma iterate_body_register_gen : forall n s v,
   n + v <= 16 ->
   get_reg (iterate_body n s) 0 = (v + n) mod 16.
 Proof.
-Admitted.
+  induction n; intros s v HWF Hreg Hv Hbound.
+  - simpl iterate_body. rewrite Hreg.
+    replace (v + 0) with v by lia.
+    symmetry. apply Nat.mod_small. lia.
+  - simpl iterate_body.
+    assert (HWF': WF (execute s count_loop_body)) by (apply count_loop_body_preserves_WF; exact HWF).
+    assert (Hreg': get_reg (execute s count_loop_body) 0 = (v + 1) mod 16).
+    { apply count_loop_body_increments; assumption. }
+    assert (Hv': (v + 1) mod 16 < 16) by (apply Nat.mod_upper_bound; lia).
+    destruct (Nat.eq_dec v 15) as [Hv15 | Hv15].
+    + subst v. assert (Hn0: n = 0) by lia. subst n.
+      simpl iterate_body. exact Hreg'.
+    + assert (Hmod_small: (v + 1) mod 16 = v + 1) by (apply Nat.mod_small; lia).
+      rewrite Hmod_small in Hreg', Hv'.
+      assert (Hbound': n + (v + 1) <= 16) by lia.
+      rewrite IHn with (v := v + 1); auto.
+      replace (v + 1 + n) with (v + S n) by lia.
+      reflexivity.
+Qed.
 
 Lemma iterate_body_register_value : forall n s,
   WF s ->
