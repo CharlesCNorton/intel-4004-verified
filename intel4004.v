@@ -2885,24 +2885,7 @@ Proof.
   { subst s1. rewrite set_reg_preserves_length. assumption. }
   assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
   { subst s1. apply set_reg_preserves_Forall16. assumption. }
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. eapply nth_Forall_lt; eauto; lia.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  unfold WF. simpl. rebuild_WF.
 Qed.
 
 (** Proves INC execution preserves well-formedness. *)
@@ -2916,24 +2899,7 @@ Proof.
   { subst s1. rewrite set_reg_preserves_length. assumption. }
   assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
   { subst s1. apply set_reg_preserves_Forall16. assumption. }
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  unfold WF. simpl. rebuild_WF.
 Qed.
 
 (** Proves ADD execution preserves well-formedness. *)
@@ -3101,24 +3067,7 @@ Proof.
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
   assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
   { subst s1. apply set_reg_pair_preserves_Forall16. assumption. }
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  unfold WF. simpl. rebuild_WF.
 Qed.
 
 Lemma execute_SRC_WF : forall s r, WF s -> instr_wf (SRC r) -> WF (execute s (SRC r)).
@@ -3141,23 +3090,9 @@ Proof.
   { subst rno. apply Nat.mod_upper_bound. lia. }
   assert (Hlo: lo < 16).
   { subst lo. apply Nat.mod_upper_bound. lia. }
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. unfold WF_sel. unfold NCHIPS, NREGS, NMAIN. simpl. split; [exact Hchip | split; [exact Hrno | exact Hlo]].
-  split. assumption.
-  split. assumption.
-  split. exact Hhi.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  assert (Hsel': WF_sel (mkRAMSel chip rno lo)).
+  { unfold WF_sel, NCHIPS, NREGS, NMAIN. simpl. auto. }
+  rebuild_WF.
 Qed.
 
 Lemma execute_FIN_WF : forall s r, WF s -> instr_wf (FIN r) -> WF (execute s (FIN r)).
@@ -3170,48 +3105,13 @@ Proof.
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
   assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
   { subst s1. apply set_reg_pair_preserves_Forall16. assumption. }
-  unfold WF. simpl.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  unfold WF. simpl. rebuild_WF.
 Qed.
 
 Lemma execute_JIN_WF : forall s r, WF s -> instr_wf (JIN r) -> WF (execute s (JIN r)).
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. apply addr12_bound.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  split. assumption.
-  assumption.
+  destruct_WF HWF. rebuild_WF.
 Qed.
 
 Lemma execute_ISZ_WF : forall s r a, WF s -> instr_wf (ISZ r a) -> WF (execute s (ISZ r a)).
@@ -3224,43 +3124,7 @@ Proof.
   { subst s1. rewrite set_reg_preserves_length. assumption. }
   assert (Hs1_for: Forall (fun x => x < 16) (regs s1)).
   { subst s1. apply set_reg_preserves_Forall16. assumption. }
-  destruct (nibble_of_nat (get_reg s r + 1) =? 0).
-  - unfold WF. simpl.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
-  - unfold WF. simpl.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
+  destruct (nibble_of_nat (get_reg s r + 1) =? 0); unfold WF; rebuild_WF.
 Qed.
 
 (* Stack pop preserves all state fields except stack itself. *)
