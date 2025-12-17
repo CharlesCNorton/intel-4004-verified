@@ -3083,48 +3083,18 @@ Proof.
       simpl in H. exact H. }
     pose proof (pop_stack_preserves_fields s (Some addr) s' Epop) as Hfields.
     destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest [Hpaddr' [Hpdata' Hpenable']]]]]]]]]]]]].
-    unfold WF. simpl.
-    split. rewrite Hregs. assumption.
-    split. rewrite Hregs. assumption.
-    split. apply nibble_lt16.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
+    assert (HlenR': length (regs s') = 16) by (rewrite Hregs; assumption).
+    assert (HforR': Forall (fun x => x < 16) (regs s')) by (rewrite Hregs; assumption).
+    unfold WF. rebuild_WF.
   - assert (Hs'_len: length (stack s') <= 3).
     { eapply pop_stack_len_le3; eauto; lia. }
     assert (Hs'_for: Forall (fun x => x < 4096) (stack s')).
     { eapply pop_stack_Forall_addr12; eauto. }
     pose proof (pop_stack_preserves_fields s None s' Epop) as Hfields.
     destruct Hfields as [Hregs [Hacc' [Hcarry [Hpc' [Hram [Hbank' [Hsel' [Hrp [Hsr [Hrom [Htest [Hpaddr' [Hpdata' Hpenable']]]]]]]]]]]]].
-    unfold WF. simpl.
-    split. rewrite Hregs. assumption.
-    split. rewrite Hregs. assumption.
-    split. apply nibble_lt16.
-    split. apply addr12_bound.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    assumption.
+    assert (HlenR': length (regs s') = 16) by (rewrite Hregs; assumption).
+    assert (HforR': Forall (fun x => x < 16) (regs s')) by (rewrite Hregs; assumption).
+    unfold WF. rebuild_WF.
 Qed.
 
 (** Proves writing to main RAM preserves system-level bank count invariant. *)
