@@ -3674,6 +3674,39 @@ Lemma daa_adjust_rule : forall s,
   carry s' = (16 <=? adjusted).
 Proof. intros; simpl; split; reflexivity. Qed.
 
+Definition is_bcd_digit (n : nat) : Prop := n <= 9.
+
+Lemma daa_produces_bcd : forall s,
+  WF s ->
+  is_bcd_digit (acc s) ->
+  is_bcd_digit (acc (execute s DAA)).
+Proof.
+  intros s HWF Hbcd.
+  unfold is_bcd_digit in *.
+  unfold execute.
+  simpl.
+  destruct (carry s) eqn:Ec.
+  - destruct (9 <? acc s + 1) eqn:E.
+    + apply Nat.ltb_lt in E.
+      unfold nibble_of_nat.
+      assert (He: acc s = 9) by lia.
+      rewrite He.
+      simpl. lia.
+    + apply Nat.ltb_ge in E.
+      unfold nibble_of_nat.
+      assert (Hlt: acc s + 1 < 16) by lia.
+      replace (acc s + 1) with (acc s + 1) by lia.
+      rewrite Nat.mod_small; lia.
+  - destruct (9 <? acc s + 0) eqn:E.
+    + apply Nat.ltb_lt in E.
+      replace (acc s + 0) with (acc s) in E by lia. lia.
+    + apply Nat.ltb_ge in E.
+      replace (acc s + 0) with (acc s) in * by lia.
+      unfold nibble_of_nat.
+      rewrite Nat.mod_small; lia.
+Qed.
+
+
 (* --- Page-relative control flow utilities (spec-accurate bases) --- *)
 
 Lemma jin_pc_within_page : forall s r,
