@@ -6193,8 +6193,7 @@ Proof.
   intros r Hr.
   unfold get_reg_pair, get_reg, init_state.
   simpl.
-  do 16 (destruct r; [simpl; reflexivity |]).
-  lia.
+  nibble_cases r.
 Qed.
 
 (** Setting a pair then reading individual registers. *)
@@ -6272,7 +6271,7 @@ Lemma pair_successor_bounded : forall r,
   (r - r mod 2) + 1 < 16.
 Proof.
   intros r Hr.
-  do 16 (destruct r; [simpl; lia |]); lia.
+  nibble_cases r.
 Qed.
 
 Lemma reg_pairs_are_eight : forall r,
@@ -7670,8 +7669,7 @@ Proof.
   intros a. unfold hoare_triple. intros s HWF [Hacc Ha].
   split.
   - apply execute_CMA_WF. exact HWF.
-  - unfold execute. simpl. rewrite Hacc.
-    do 16 (destruct a; simpl; [reflexivity|]); lia.
+  - unfold execute. simpl. rewrite Hacc. nibble_cases a.
 Qed.
 
 Lemma hoare_CMA_double_involution : forall a r v,
@@ -7683,7 +7681,7 @@ Proof.
   split.
   - apply execute_CMA_WF. exact HWF.
   - unfold execute. simpl. split.
-    + rewrite Hacc. do 16 (destruct a; simpl; [reflexivity|]); lia.
+    + rewrite Hacc. nibble_cases a.
     + exact Hreg.
 Qed.
 
@@ -7692,7 +7690,7 @@ Lemma hoare_CMA_involution_proof : forall a,
   15 - (15 - a) = a.
 Proof.
   intros a Ha.
-  do 16 (destruct a; simpl; [reflexivity|]); lia.
+  nibble_cases a.
 Qed.
 
 Lemma hoare_IAC :
@@ -7905,7 +7903,7 @@ Proof.
     split.
     + unfold nibble_of_nat. rewrite Nat.add_0_r.
       rewrite Nat.mod_small by lia. lia.
-    + do 16 (destruct v; simpl; [reflexivity|]); lia.
+    + nibble_cases v.
 Qed.
 
 Lemma hoare_SUB : forall r,
@@ -8687,7 +8685,7 @@ Proof.
   split. exact HWF2.
   unfold execute. simpl.
   rewrite Hacc.
-  do 16 (destruct a; simpl; [reflexivity|]); lia.
+  nibble_cases a.
 Qed.
 
 Example ex_CMA_involution_frame : forall a r v,
@@ -8704,8 +8702,7 @@ Proof.
   { apply execute_CMA_WF. exact HWF1. }
   split. exact HWF2.
   split.
-  - unfold execute. simpl. rewrite Hacc.
-    do 16 (destruct a; simpl; [reflexivity|]); lia.
+  - unfold execute. simpl. rewrite Hacc. nibble_cases a.
   - unfold execute. simpl. exact Hreg.
 Qed.
 
@@ -9005,7 +9002,7 @@ Proof.
   unfold execute. simpl.
   rewrite Hacc.
   split; [|split].
-  - do 16 (destruct a; simpl; [reflexivity|]); lia.
+  - nibble_cases a.
   - exact Hr1.
   - exact Hr2.
 Qed.
@@ -9109,7 +9106,7 @@ Proof.
   split. exact HWF1.
   unfold execute. simpl.
   rewrite Hacc, Hcarry. simpl.
-  do 16 (destruct v; simpl; [reflexivity | ]); lia.
+  nibble_cases v.
 Qed.
 
 Example test_bit_zero : forall v,
