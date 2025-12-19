@@ -2169,6 +2169,55 @@ Ltac prove_WF_preservation :=
       unfold execute, WF in *; simpl; destruct_WF H; rebuild_WF
   end.
 
+(** Tactic to simplify register read after update. *)
+Ltac reg_simp :=
+  repeat first
+    [ rewrite nth_update_nth_eq by
+        (first [ assumption | lia
+               | match goal with
+                 | [ H : length (regs _) = 16 |- _ ] => rewrite H; lia
+                 end ])
+    | rewrite nth_update_nth_neq by lia
+    ];
+  try (unfold nibble_of_nat; rewrite ?Nat.mod_small by lia).
+
+(** Tactic for exhaustive case analysis on nibble values (0-15). *)
+Ltac nibble_cases v :=
+  do 16 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
+
+(** Tactic for exhaustive case analysis on byte values (0-255). *)
+Ltac byte_cases v :=
+  do 256 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
+
+(** Tactic to simplify addr12_of_nat when argument is provably < 4096. *)
+Ltac addr12_simp :=
+  unfold addr12_of_nat;
+  try rewrite Nat.mod_small by lia.
+
+(** Combined simplification tactic for common post-execute cleanup. *)
+Ltac exec_simp :=
+  unfold execute, get_reg, set_reg, nibble_of_nat in *;
+  simpl;
+  repeat match goal with
+  | [ H : length (regs _) = 16 |- _ ] =>
+      try (rewrite nth_update_nth_eq by (rewrite H; lia));
+      try (rewrite nth_update_nth_neq by lia)
+  end;
+  try rewrite ?Nat.mod_small by lia.
+
+(** Tactic to prove instr_wf goals. *)
+Ltac prove_instr_wf :=
+  unfold instr_wf; repeat split; try lia; try reflexivity.
+
+(** Tactic to extract length and Forall from WF hypothesis. *)
+Ltac wf_extract H :=
+  let HlenR := fresh "HlenR" in
+  let HforR := fresh "HforR" in
+  let Hacc := fresh "Hacc" in
+  assert (HlenR : length (regs _) = 16) by (destruct H as [HlenR _]; exact HlenR);
+  assert (HforR : Forall (fun x => x < 16) (regs _)) by (destruct H as [_ [HforR _]]; exact HforR);
+  assert (Hacc : acc _ < 16) by (destruct H as [_ [_ [Hacc _]]]; exact Hacc).
+
 (** Main RAM read-after-write correctness: reading main RAM returns normalized written value. *)
 Lemma ram_write_then_read_main : forall s v,
   WF s ->
@@ -6264,7 +6313,7 @@ Proof.
   - destruct (r' mod 2) eqn:E.
     + assert (S r' mod 2 = 1).
       { replace (S r') with (r' + 1) by lia.
-        rewrite Nat.add_mod by lia.
+        rewrite Nat.Div0.add_mod.
         rewrite E.
         simpl.
         reflexivity. }
@@ -6276,7 +6325,7 @@ Proof.
       subst n.
       assert (S r' mod 2 = 0).
       { replace (S r') with (r' + 1) by lia.
-        rewrite Nat.add_mod by lia.
+        rewrite Nat.Div0.add_mod.
         rewrite E.
         simpl.
         reflexivity. }
@@ -6317,7 +6366,7 @@ Proof.
       assert (n = 0) by lia.
       subst n.
       replace (S r) with (r + 1) in H by lia.
-      rewrite Nat.add_mod in H by lia.
+      rewrite Nat.Div0.add_mod in H.
       rewrite E in H.
       simpl in H.
       discriminate. }
@@ -6333,7 +6382,7 @@ Lemma even_reg_same_pair_as_successor : forall s r,
 Proof.
   intros s r Heven.
   assert (Hsucc: (r + 1) mod 2 = 1).
-  { rewrite Nat.add_mod by lia. rewrite Heven. simpl. reflexivity. }
+  { rewrite Nat.Div0.add_mod. rewrite Heven. simpl. reflexivity. }
   rewrite get_reg_pair_normalizes.
   rewrite (get_reg_pair_normalizes s (r + 1)).
   rewrite Heven.
@@ -6798,7 +6847,7 @@ Proof.
   assert (Heven: (2 * pair_idx) mod 2 = 0).
   { rewrite Nat.mul_comm. rewrite Nat.Div0.mod_mul. reflexivity. }
   assert (Hodd: (2 * pair_idx + 1) mod 2 = 1).
-  { rewrite Nat.add_mod by lia.
+  { rewrite Nat.Div0.add_mod.
     rewrite Nat.mul_comm.
     rewrite Nat.Div0.mod_mul.
     simpl. reflexivity. }
@@ -7329,6 +7378,45 @@ Definition hoare_triple (P Q : Intel4004State -> Prop) (i : Instruction) : Prop 
     WF s' /\ Q s'.
 
 Notation "{{ P }} i {{ Q }}" := (hoare_triple P Q i) (at level 90, i at next level).
+
+(** Tactic to introduce a Hoare triple goal, destructing precondition conjuncts. *)
+Ltac hoare_intro :=
+  unfold hoare_triple;
+  intros ?s ?HWF ?HP;
+  repeat match goal with
+  | [ H : _ /\ _ |- _ ] => destruct H
+  end.
+
+(** Tactic to prove Hoare triple: intro, split WF/post, try automation. *)
+Ltac hoare_split :=
+  split;
+  [ first [ eapply execute_NOP_WF | eapply execute_LDM_WF | eapply execute_LD_WF
+          | eapply execute_CLB_WF | eapply execute_CLC_WF | eapply execute_STC_WF
+          | eapply execute_CMC_WF | eapply execute_CMA_WF | eapply execute_IAC_WF
+          | eapply execute_DAC_WF | eapply execute_RAL_WF | eapply execute_RAR_WF
+          | eapply execute_TCC_WF | eapply execute_TCS_WF | eapply execute_DAA_WF
+          | eapply execute_KBP_WF | eapply execute_INC_WF | eapply execute_ADD_WF
+          | eapply execute_SUB_WF | eapply execute_XCH_WF | eapply execute_FIM_WF
+          | eapply execute_SRC_WF | eapply execute_FIN_WF | eapply execute_JIN_WF
+          | eapply execute_JUN_WF | eapply execute_JMS_WF | eapply execute_JCN_WF
+          | eapply execute_ISZ_WF | eapply execute_BBL_WF | eapply execute_RDM_WF
+          | eapply execute_WRM_WF | eapply execute_WMP_WF | eapply execute_WRR_WF
+          | eapply execute_RDR_WF | eapply execute_ADM_WF | eapply execute_SBM_WF
+          | eapply execute_WR0_WF | eapply execute_WR1_WF | eapply execute_WR2_WF
+          | eapply execute_WR3_WF | eapply execute_RD0_WF | eapply execute_RD1_WF
+          | eapply execute_RD2_WF | eapply execute_RD3_WF | eapply execute_DCL_WF
+          | eapply execute_WPM_WF ]; eauto
+  | unfold execute; simpl ].
+
+(** Fully automated Hoare triple prover for simple cases. *)
+Ltac auto_hoare :=
+  hoare_intro;
+  hoare_split;
+  try reg_simp;
+  try (split; [| split]; try reflexivity; try assumption; try lia);
+  try reflexivity;
+  try assumption;
+  try lia.
 
 (* ==================== Structural Rules =========================== *)
 
@@ -8427,6 +8515,37 @@ Definition hoare_prog (P Q : Intel4004State -> Prop) (prog : list Instruction) :
     WF s' /\ Q s'.
 
 Notation "{{| P |}} prog {{| Q |}}" := (hoare_prog P Q prog) (at level 90).
+
+(** Tactic to introduce a hoare_prog goal, destructing precondition. *)
+Ltac hoare_prog_intro :=
+  unfold hoare_prog;
+  intros ?s ?HWF ?HP;
+  simpl exec_program;
+  repeat match goal with
+  | [ H : _ /\ _ |- _ ] => destruct H
+  end.
+
+(** Tactic to assert WF preservation for one instruction step. *)
+Ltac assert_WF_step instr n :=
+  let HWFn := fresh "HWF" n in
+  assert (HWFn : WF (execute _ instr));
+  [ first [ apply execute_NOP_WF | apply execute_LDM_WF | apply execute_LD_WF
+          | apply execute_CLB_WF | apply execute_CLC_WF | apply execute_STC_WF
+          | apply execute_CMC_WF | apply execute_CMA_WF | apply execute_IAC_WF
+          | apply execute_DAC_WF | apply execute_RAL_WF | apply execute_RAR_WF
+          | apply execute_TCC_WF | apply execute_TCS_WF | apply execute_DAA_WF
+          | apply execute_KBP_WF | apply execute_INC_WF | apply execute_ADD_WF
+          | apply execute_SUB_WF | apply execute_XCH_WF | apply execute_FIM_WF
+          | apply execute_SRC_WF | apply execute_FIN_WF | apply execute_JIN_WF
+          | apply execute_JUN_WF | apply execute_JMS_WF | apply execute_JCN_WF
+          | apply execute_ISZ_WF | apply execute_BBL_WF | apply execute_RDM_WF
+          | apply execute_WRM_WF | apply execute_WMP_WF | apply execute_WRR_WF
+          | apply execute_RDR_WF | apply execute_ADM_WF | apply execute_SBM_WF
+          | apply execute_WR0_WF | apply execute_WR1_WF | apply execute_WR2_WF
+          | apply execute_WR3_WF | apply execute_RD0_WF | apply execute_RD1_WF
+          | apply execute_RD2_WF | apply execute_RD3_WF | apply execute_DCL_WF
+          | apply execute_WPM_WF ]; eauto; try (unfold instr_wf; lia)
+  | ].
 
 Lemma hoare_single : forall P Q i,
   {{ P }} i {{ Q }} ->
