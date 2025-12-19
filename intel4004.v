@@ -4455,6 +4455,348 @@ Lemma page_base_eq_page_times_256 : forall a,
   page_base a = page_of a * 256.
 Proof. intros. unfold page_base. reflexivity. Qed.
 
+(* ==================== Page Boundary Crossing Behavior ==================== *)
+
+(** Page number is always bounded by 16 (4 bits). *)
+Lemma page_of_bound : forall p,
+  p < 4096 -> page_of p < 16.
+Proof.
+  intros p Hp.
+  unfold page_of.
+  apply Nat.Div0.div_lt_upper_bound.
+  lia.
+Qed.
+
+(** Page offset (lower 8 bits) is always bounded by 256. *)
+Lemma page_offset_bound_strict : forall p,
+  p mod 256 < 256.
+Proof.
+  intros p.
+  apply Nat.mod_upper_bound.
+  lia.
+Qed.
+
+(** Any 12-bit address decomposes into page and offset. *)
+Lemma page_decomposition : forall p,
+  p < 4096 ->
+  p = page_of p * 256 + p mod 256.
+Proof.
+  intros p Hp.
+  unfold page_of.
+  pose proof (Nat.div_mod p 256) as H.
+  assert (H256: 256 <> 0) by lia.
+  specialize (H H256).
+  lia.
+Qed.
+
+(** page_base plus offset recovers the original address. *)
+Lemma page_base_offset_decomp : forall p,
+  p < 4096 ->
+  p = page_base p + p mod 256.
+Proof.
+  intros p Hp.
+  unfold page_base.
+  apply page_decomposition.
+  exact Hp.
+Qed.
+
+(** page_of after addr12_of_nat normalization. *)
+Lemma page_of_addr12 : forall n,
+  page_of (addr12_of_nat n) = (n mod 4096) / 256.
+Proof.
+  intros n.
+  unfold page_of, addr12_of_nat.
+  reflexivity.
+Qed.
+
+(** Two addresses in the same page have identical page_of values. *)
+Lemma same_page_same_page_of : forall p1 p2,
+  p1 < 4096 -> p2 < 4096 ->
+  page_of p1 = page_of p2 <->
+  p1 / 256 = p2 / 256.
+Proof.
+  intros p1 p2 Hp1 Hp2.
+  unfold page_of.
+  split; auto.
+Qed.
+
+(** Address stays in same page when offset doesn't overflow. *)
+Lemma same_page_within_offset : forall p off,
+  p < 4096 ->
+  off < 256 ->
+  p mod 256 + off < 256 ->
+  page_of (p + off) = page_of p.
+Proof.
+  intros p off Hp Hoff Hno_overflow.
+  unfold page_of.
+  pose proof (Nat.div_mod p 256) as Hdm.
+  assert (H256: 256 <> 0) by lia.
+  specialize (Hdm H256).
+  assert (Hpmod: p mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
+  assert (Hpdiv: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  assert (Hsum: p + off = p / 256 * 256 + (p mod 256 + off)) by lia.
+  rewrite Hsum.
+  rewrite Nat.div_add_l by lia.
+  assert (Hsmall: (p mod 256 + off) / 256 = 0) by (apply Nat.div_small; exact Hno_overflow).
+  rewrite Hsmall.
+  lia.
+Qed.
+
+(** Crossing page boundary: when at offset 255, next address is in next page. *)
+Lemma page_boundary_cross : forall p,
+  p < 4096 ->
+  p mod 256 = 255 ->
+  page_of (addr12_of_nat (p + 1)) = (page_of p + 1) mod 16.
+Proof.
+  intros p Hp Hmod.
+  unfold page_of, addr12_of_nat.
+  pose proof (Nat.div_mod p 256) as Hdm.
+  assert (H256: 256 <> 0) by lia.
+  specialize (Hdm H256).
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  assert (Hp1: p + 1 = (p / 256 + 1) * 256) by lia.
+  destruct (Nat.eq_dec (p / 256) 15) as [H15 | Hnot15].
+  - rewrite H15.
+    rewrite H15 in Hp1.
+    assert (Hp1': p + 1 = 4096) by lia.
+    rewrite Hp1'.
+    rewrite Nat.mod_same by lia.
+    simpl.
+    reflexivity.
+  - assert (Hlt: p / 256 + 1 < 16) by lia.
+    rewrite Hp1.
+    rewrite Nat.mod_small by lia.
+    rewrite Nat.div_mul by lia.
+    rewrite Nat.mod_small by lia.
+    reflexivity.
+Qed.
+
+(** Staying in same page: when offset < 255, next address stays in page. *)
+Lemma page_boundary_same : forall p,
+  p < 4096 ->
+  p mod 256 < 255 ->
+  page_of (addr12_of_nat (p + 1)) = page_of p.
+Proof.
+  intros p Hp Hmod.
+  unfold page_of, addr12_of_nat.
+  assert (Hp1: p + 1 < 4096 \/ p + 1 = 4096 \/ p + 1 > 4096) by lia.
+  destruct Hp1 as [Hlt | [Heq | Hgt]].
+  - rewrite Nat.mod_small by lia.
+    apply same_page_within_offset; lia.
+  - assert (p = 4095) by lia.
+    subst p.
+    simpl in Hmod.
+    lia.
+  - lia.
+Qed.
+
+(** After incrementing by 2, page behavior depends on offset. *)
+Lemma page_of_inc2 : forall p,
+  p < 4096 ->
+  p mod 256 < 254 ->
+  page_of (addr12_of_nat (p + 2)) = page_of p.
+Proof.
+  intros p Hp Hmod.
+  unfold page_of, addr12_of_nat.
+  assert (Hp2: p + 2 < 4096 \/ p + 2 >= 4096) by lia.
+  destruct Hp2 as [Hlt | Hge].
+  - rewrite Nat.mod_small by lia.
+    apply same_page_within_offset; lia.
+  - assert (Hp_high: p >= 4094) by lia.
+    pose proof (Nat.div_mod p 256) as Hdm.
+    assert (H256: 256 <> 0) by lia.
+    specialize (Hdm H256).
+    assert (Hpmod: p mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
+    assert (Hpdiv: p / 256 >= 15) by lia.
+    assert (Hpdiv': p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+    assert (Hpdiv'': p / 256 = 15) by lia.
+    assert (Hpmod': p mod 256 >= 254) by lia.
+    lia.
+Qed.
+
+(** Incrementing by 2 crosses page when at offset 254 or 255. *)
+Lemma page_of_inc2_cross_254 : forall p,
+  p < 4096 ->
+  p mod 256 = 254 ->
+  page_of (addr12_of_nat (p + 2)) = (page_of p + 1) mod 16.
+Proof.
+  intros p Hp Hmod.
+  unfold page_of, addr12_of_nat.
+  pose proof (Nat.div_mod p 256) as Hdm.
+  assert (H256: 256 <> 0) by lia.
+  specialize (Hdm H256).
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  assert (Hp2: p + 2 = (p / 256 + 1) * 256) by lia.
+  destruct (Nat.eq_dec (p / 256) 15) as [H15 | Hnot15].
+  - rewrite H15.
+    assert (Hp2': p + 2 = 4096) by lia.
+    rewrite Hp2'.
+    rewrite Nat.Div0.mod_same.
+    simpl.
+    reflexivity.
+  - assert (Hlt: p / 256 + 1 < 16) by lia.
+    rewrite Hp2.
+    rewrite Nat.mod_small by lia.
+    rewrite Nat.div_mul by lia.
+    rewrite Nat.mod_small by lia.
+    reflexivity.
+Qed.
+
+Lemma page_of_inc2_cross_255 : forall p,
+  p < 4096 ->
+  p mod 256 = 255 ->
+  page_of (addr12_of_nat (p + 2)) = (page_of p + 1) mod 16.
+Proof.
+  intros p Hp Hmod.
+  unfold page_of, addr12_of_nat.
+  pose proof (Nat.div_mod p 256) as Hdm.
+  assert (H256: 256 <> 0) by lia.
+  specialize (Hdm H256).
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  assert (Hp2: p + 2 = (p / 256 + 1) * 256 + 1) by lia.
+  destruct (Nat.eq_dec (p / 256) 15) as [H15 | Hnot15].
+  - rewrite H15.
+    assert (Hp2': p + 2 = 4097) by lia.
+    rewrite Hp2'.
+    simpl.
+    reflexivity.
+  - assert (Hlt: p / 256 + 1 < 16) by lia.
+    rewrite Hp2.
+    rewrite Nat.mod_small by lia.
+    rewrite Nat.div_add_l by lia.
+    assert (H1div: 1 / 256 = 0) by (apply Nat.div_small; lia).
+    rewrite H1div.
+    rewrite Nat.add_0_r.
+    rewrite Nat.mod_small by lia.
+    reflexivity.
+Qed.
+
+(** page_base is idempotent. *)
+Lemma page_base_idempotent : forall p,
+  p < 4096 ->
+  page_base (page_base p) = page_base p.
+Proof.
+  intros p Hp.
+  unfold page_base, page_of.
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  rewrite Nat.div_mul by lia.
+  reflexivity.
+Qed.
+
+(** page_of of page_base returns the same page. *)
+Lemma page_of_page_base : forall p,
+  p < 4096 ->
+  page_of (page_base p) = page_of p.
+Proof.
+  intros p Hp.
+  unfold page_base, page_of.
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  rewrite Nat.div_mul by lia.
+  reflexivity.
+Qed.
+
+(** Adding offset to page_base stays in same page when offset < 256. *)
+Lemma page_base_plus_offset_same_page : forall p off,
+  p < 4096 ->
+  off < 256 ->
+  page_of (page_base p + off) = page_of p.
+Proof.
+  intros p off Hp Hoff.
+  unfold page_base, page_of.
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  rewrite Nat.div_add_l by lia.
+  assert (Hsmall: off / 256 = 0) by (apply Nat.div_small; exact Hoff).
+  rewrite Hsmall.
+  lia.
+Qed.
+
+(** page_base plus offset is within address space when page < 16 and offset < 256. *)
+Lemma page_base_plus_offset_bound : forall p off,
+  p < 4096 ->
+  off < 256 ->
+  page_base p + off < 4096.
+Proof.
+  intros p off Hp Hoff.
+  unfold page_base, page_of.
+  assert (Hpage: p / 256 < 16) by (apply Nat.Div0.div_lt_upper_bound; lia).
+  lia.
+Qed.
+
+(** addr12_of_nat is identity when page_base + off < 4096. *)
+Lemma addr12_page_base_offset : forall p off,
+  p < 4096 ->
+  off < 256 ->
+  addr12_of_nat (page_base p + off) = page_base p + off.
+Proof.
+  intros p off Hp Hoff.
+  unfold addr12_of_nat.
+  rewrite Nat.mod_small.
+  - reflexivity.
+  - apply page_base_plus_offset_bound; assumption.
+Qed.
+
+(** JCN/ISZ branch target is always within the page of pc+2. *)
+Lemma branch_target_in_page : forall s off,
+  WF s ->
+  off < 256 ->
+  page_of (addr12_of_nat (page_base (pc_inc2 s) + off)) = page_of (pc_inc2 s).
+Proof.
+  intros s off Hwf Hoff.
+  unfold pc_inc2.
+  assert (Hpc: pc s < 4096).
+  { destruct Hwf as [_ [_ [_ [Hpc _]]]]. exact Hpc. }
+  assert (Hpc2: addr12_of_nat (pc s + 2) < 4096).
+  { unfold addr12_of_nat. apply Nat.mod_upper_bound. lia. }
+  rewrite addr12_page_base_offset by (exact Hpc2 || exact Hoff).
+  apply page_base_plus_offset_same_page.
+  - exact Hpc2.
+  - exact Hoff.
+Qed.
+
+(** Page wrap: incrementing from page 15 offset 255 wraps to page 0. *)
+Lemma page_wrap_to_zero : forall p,
+  p = 4095 ->
+  page_of (addr12_of_nat (p + 1)) = 0.
+Proof.
+  intros p Hp.
+  subst p.
+  unfold page_of, addr12_of_nat.
+  simpl.
+  reflexivity.
+Qed.
+
+(** Full address space wrap: 4096 wraps to 0. *)
+Lemma addr_space_wrap : forall n,
+  addr12_of_nat (n + 4096) = addr12_of_nat n.
+Proof.
+  intros n.
+  unfold addr12_of_nat.
+  replace (n + 4096) with (4096 + n) by lia.
+  rewrite Nat.Div0.add_mod.
+  rewrite Nat.mod_same by lia.
+  rewrite Nat.add_0_l.
+  rewrite Nat.Div0.mod_mod.
+  reflexivity.
+Qed.
+
+(** Characterizes when pc+2 crosses a page boundary. *)
+Lemma pc_inc2_page_cross_characterization : forall s,
+  WF s ->
+  (pc s mod 256 < 254 -> page_of (pc_inc2 s) = page_of (pc s)) /\
+  (pc s mod 256 = 254 -> page_of (pc_inc2 s) = (page_of (pc s) + 1) mod 16) /\
+  (pc s mod 256 = 255 -> page_of (pc_inc2 s) = (page_of (pc s) + 1) mod 16).
+Proof.
+  intros s Hwf.
+  destruct Hwf as [_ [_ [_ [Hpc _]]]].
+  unfold pc_inc2.
+  split; [|split].
+  - intro Hmod. apply page_of_inc2; assumption.
+  - intro Hmod. apply page_of_inc2_cross_254; assumption.
+  - intro Hmod. apply page_of_inc2_cross_255; assumption.
+Qed.
+
+(* ==================== End Page Boundary Crossing Behavior ==================== *)
+
 (** Proves JIN sets PC within page of next instruction. *)
 Lemma pc_shape_jin : forall s r,
   pc (execute s (JIN r)) = addr12_of_nat (page_of (pc_inc1 s) * 256 + get_reg_pair s r mod 256).
@@ -4487,6 +4829,93 @@ Proof.
   destruct (nibble_of_nat (get_reg s r + 1) =? 0) eqn:E.
   - apply Nat.eqb_eq in E. contradiction.
   - reflexivity.
+Qed.
+
+(** JCN branch preserves page of pc+2 when branch is taken. *)
+Theorem jcn_branch_stays_in_page : forall s cond off,
+  WF s ->
+  off < 256 ->
+  jcn_condition s cond = true ->
+  page_of (pc (execute s (JCN cond off))) = page_of (pc_inc2 s).
+Proof.
+  intros s cond off Hwf Hoff Hcond.
+  rewrite jcn_branch_taken by exact Hcond.
+  unfold base_for_next2.
+  apply branch_target_in_page; assumption.
+Qed.
+
+(** ISZ branch preserves page of pc+2 when register doesn't wrap. *)
+Theorem isz_branch_stays_in_page : forall s r off,
+  WF s ->
+  off < 256 ->
+  nibble_of_nat (get_reg s r + 1) <> 0 ->
+  page_of (pc (execute s (ISZ r off))) = page_of (pc_inc2 s).
+Proof.
+  intros s r off Hwf Hoff Hnonzero.
+  rewrite pc_shape_isz_nonzero by exact Hnonzero.
+  apply branch_target_in_page; assumption.
+Qed.
+
+(** JIN stays within page of pc+1. *)
+Theorem jin_stays_in_page : forall s r,
+  WF s ->
+  page_of (pc (execute s (JIN r))) = page_of (pc_inc1 s).
+Proof.
+  intros s r Hwf.
+  rewrite pc_shape_jin.
+  destruct Hwf as [_ [_ [_ [Hpc _]]]].
+  unfold pc_inc1.
+  set (pc1 := addr12_of_nat (pc s + 1)).
+  assert (Hpc1: pc1 < 4096) by (unfold pc1, addr12_of_nat; apply Nat.mod_upper_bound; lia).
+  assert (Hoff: get_reg_pair s r mod 256 < 256) by (apply Nat.mod_upper_bound; lia).
+  assert (Htarget: page_of pc1 * 256 + get_reg_pair s r mod 256 < 4096).
+  { assert (Hpage: page_of pc1 < 16) by (apply page_of_bound; assumption).
+    lia. }
+  rewrite page_of_addr12.
+  rewrite Nat.mod_small by exact Htarget.
+  unfold page_of at 1.
+  rewrite Nat.div_add_l by lia.
+  assert (Hdiv0: get_reg_pair s r mod 256 / 256 = 0) by (apply Nat.div_small; exact Hoff).
+  rewrite Hdiv0.
+  rewrite Nat.add_0_r.
+  fold (page_of pc1).
+  reflexivity.
+Qed.
+
+(** FIN stays within page 0 when page_of (pc+1) = 0. *)
+Theorem fin_page_zero_stays : forall s r,
+  WF s ->
+  page_of (pc_inc1 s) = 0 ->
+  page_of (pc (execute s (FIN r))) = 0.
+Proof.
+  intros s r Hwf Hpage.
+  unfold execute.
+  rewrite Hpage.
+  simpl.
+  unfold pc_inc2, pc_inc1 in *.
+  destruct Hwf as [_ [_ [_ [Hpc _]]]].
+  unfold page_of, addr12_of_nat in *.
+  assert (Hpc1_mod: (pc s + 1) mod 4096 < 4096) by (apply Nat.mod_upper_bound; lia).
+  assert (Hpc2_mod: (pc s + 2) mod 4096 < 4096) by (apply Nat.mod_upper_bound; lia).
+  assert (Hpc1: pc s + 1 < 4096 \/ pc s + 1 >= 4096) by lia.
+  destruct Hpc1 as [Hlt | Hge].
+  - rewrite Nat.mod_small in Hpage by lia.
+    assert (Hpc_page0: pc s + 1 < 256).
+    { assert (H: (pc s + 1) / 256 = 0) by exact Hpage.
+      destruct (Nat.lt_ge_cases (pc s + 1) 256) as [Hlt' | Hge']; [exact Hlt' |].
+      assert (Hdiv_pos: (pc s + 1) / 256 >= 1) by (apply Nat.div_le_lower_bound; lia).
+      lia. }
+    destruct (Nat.lt_ge_cases (pc s + 2) 4096) as [Hlt2 | Hge2].
+    + rewrite Nat.mod_small by lia.
+      apply Nat.div_small.
+      lia.
+    + assert (pc s = 4094) by lia.
+      lia.
+  - assert (pc s >= 4095) by lia.
+    assert (pc s = 4095) by lia.
+    subst.
+    simpl.
+    reflexivity.
 Qed.
 
 (** Proves BBL returns to popped address when stack non-empty. *)
