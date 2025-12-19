@@ -1640,6 +1640,23 @@ Definition WF (s : Intel4004State) : Prop :=
   prom_addr s < 4096 /\
   prom_data s < 256.
 
+(** Tactic to destruct WF into its 17 named components. *)
+Ltac destruct_WF H :=
+  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
+    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+
+(** Tactic for exhaustive case analysis on nibble values (0-15). *)
+Ltac nibble_cases v :=
+  do 16 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
+
+(** Tactic for exhaustive case analysis on byte values (0-255). *)
+Ltac byte_cases v :=
+  do 256 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
+
+(** Tactic for proving bounds on even registers (uses evenness hypothesis). *)
+Ltac even_reg_bound r H :=
+  do 16 (destruct r; [simpl in H; try discriminate; simpl; lia |]); lia.
+
 (** Proves repeat 0 n satisfies Forall (< 16). *)
 Lemma repeat_0_lt_16 : forall n, Forall (fun x => x < 16) (repeat 0 n).
 Proof.
@@ -1802,8 +1819,7 @@ Lemma reset_state_WF : forall s, WF s -> WF (reset_state s).
 Proof.
   intros s HWF.
   unfold reset_state, WF in *.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   simpl.
   split. assumption.
   split. assumption.
@@ -2126,11 +2142,6 @@ Proof.
   eapply nth_Forall_lt; eauto; lia.
 Qed.
 
-(** Tactic to destruct WF into its 17 named components. *)
-Ltac destruct_WF H :=
-  destruct H as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
-
 (** Tactic to solve computed mod bounds (after simpl expands mod to Nat.divmod). *)
 Ltac solve_mod_bound :=
   match goal with
@@ -2180,14 +2191,6 @@ Ltac reg_simp :=
     | rewrite nth_update_nth_neq by lia
     ];
   try (unfold nibble_of_nat; rewrite ?Nat.mod_small by lia).
-
-(** Tactic for exhaustive case analysis on nibble values (0-15). *)
-Ltac nibble_cases v :=
-  do 16 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
-
-(** Tactic for exhaustive case analysis on byte values (0-255). *)
-Ltac byte_cases v :=
-  do 256 (destruct v as [|v]; [simpl; try reflexivity; try lia |]); lia.
 
 (** Tactic to simplify addr12_of_nat when argument is provably < 4096. *)
 Ltac addr12_simp :=
@@ -2926,8 +2929,7 @@ Proof. prove_WF_preservation. Qed.
 Lemma execute_XCH_WF : forall s r, WF s -> instr_wf (XCH r) -> WF (execute s (XCH r)).
 Proof.
   intros s r HWF Hwfi. unfold execute. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := set_reg s r (acc s)).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -2940,8 +2942,7 @@ Qed.
 Lemma execute_INC_WF : forall s r, WF s -> instr_wf (INC r) -> WF (execute s (INC r)).
 Proof.
   intros s r HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := set_reg s r (nibble_of_nat (get_reg s r + 1))).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -3050,8 +3051,7 @@ Qed.
 Lemma execute_JMS_WF : forall s a, WF s -> instr_wf (JMS a) -> WF (execute s (JMS a)).
 Proof.
   intros s a HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := push_stack s (addr12_of_nat (pc s + 2))).
   assert (Hs1_len: length (stack s1) <= 3).
   { subst s1. apply push_stack_len_le3. }
@@ -3091,8 +3091,7 @@ Qed.
 Lemma execute_FIM_WF : forall s r d, WF s -> instr_wf (FIM r d) -> WF (execute s (FIM r d)).
 Proof.
   intros s r d HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := set_reg_pair s r d).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
@@ -3104,8 +3103,7 @@ Qed.
 Lemma execute_SRC_WF : forall s r, WF s -> instr_wf (SRC r) -> WF (execute s (SRC r)).
 Proof.
   intros s r HWF Hwfi. unfold execute, WF in *. simpl.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (v := get_reg_pair s r).
   set (hi := v / 16).
   set (lo := v mod 16).
@@ -3129,8 +3127,7 @@ Qed.
 Lemma execute_FIN_WF : forall s r, WF s -> instr_wf (FIN r) -> WF (execute s (FIN r)).
 Proof.
   intros s r HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := set_reg_pair s r _).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_pair_preserves_length. assumption. }
@@ -3148,8 +3145,7 @@ Qed.
 Lemma execute_ISZ_WF : forall s r a, WF s -> instr_wf (ISZ r a) -> WF (execute s (ISZ r a)).
 Proof.
   intros s r a HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   set (s1 := set_reg s r _).
   assert (Hs1_len: length (regs s1) = 16).
   { subst s1. rewrite set_reg_preserves_length. assumption. }
@@ -3200,8 +3196,7 @@ Qed.
 Lemma execute_BBL_WF : forall s d, WF s -> instr_wf (BBL d) -> WF (execute s (BBL d)).
 Proof.
   intros s d HWF Hwfi. unfold execute.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   destruct (pop_stack s) as [[addr|] s'] eqn:Epop.
   - assert (Hs'_len: length (stack s') <= 3).
     { eapply pop_stack_len_le3; eauto; lia. }
@@ -5588,7 +5583,7 @@ Proof.
   - simpl. inversion Hforall; subst.
     apply IH.
     + unfold execute, set_prom_params. simpl.
-      destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+      destruct_WF HWF.
       unfold WF. simpl.
       split. exact HlenR.
       split. exact HforR.
@@ -5623,7 +5618,7 @@ Proof.
     rewrite IH.
     + apply load_program_step_rom_length_weak; assumption.
     + unfold execute, set_prom_params. simpl.
-      destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+      destruct_WF HWF.
       unfold WF. simpl.
       split. exact HlenR.
       split. exact HforR.
@@ -6407,7 +6402,7 @@ Proof.
   unfold get_reg, set_reg.
   simpl.
   assert (Hr1: r + 1 < 16).
-  { do 16 (destruct r; [simpl in Heven; try discriminate; simpl; lia |]). lia. }
+  { even_reg_bound r Heven. }
   rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
   rewrite nth_update_nth_neq by lia.
   unfold nibble_of_nat.
@@ -6526,7 +6521,7 @@ Proof.
   unfold get_reg, set_reg.
   simpl.
   assert (Hr1: r + 1 < 16).
-  { do 16 (destruct r; [simpl in Heven; try discriminate; lia |]). lia. }
+  { even_reg_bound r Heven. }
   rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
   rewrite nth_update_nth_neq by lia.
   unfold nibble_of_nat.
@@ -6576,7 +6571,7 @@ Proof.
   unfold get_reg, set_reg.
   simpl.
   assert (Hr1: r + 1 < 16).
-  { do 16 (destruct r; [simpl in Heven; try discriminate; lia |]). lia. }
+  { even_reg_bound r Heven. }
   rewrite nth_update_nth_eq by (rewrite Hlen; exact Hr).
   rewrite nth_update_nth_neq by lia.
   reflexivity.
@@ -7925,8 +7920,7 @@ Lemma hoare_XCH : forall r,
 Proof.
   intros r. unfold hoare_triple. intros s HWF Hr.
   assert (HWF': WF s) by assumption.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   assert (Hwfi: instr_wf (XCH r)) by (unfold instr_wf; lia).
   split; [apply execute_XCH_WF; auto|].
   unfold execute. simpl.
@@ -8436,8 +8430,7 @@ Lemma hoare_BBL : forall d,
 Proof.
   intros d. unfold hoare_triple. intros s HWF Hd.
   assert (HWF': WF s) by assumption.
-  destruct HWF as [HlenR [HforR [Hacc [Hpc [Hstklen [HstkFor
-    [HsysLen [HsysFor [Hbank [Hsel [HrpLen [HrpFor [Hselrom [HromFor [HromLen [Hpaddr Hpdata]]]]]]]]]]]]]]]].
+  destruct_WF HWF.
   split; [apply execute_BBL_WF; auto; unfold instr_wf; exact Hd|].
   unfold execute. destruct (pop_stack s) as [[addr|] s'] eqn:Epop; simpl; (split; [reflexivity|eapply pop_stack_len_le3; eauto; lia]).
 Qed.
