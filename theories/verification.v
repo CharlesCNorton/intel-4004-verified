@@ -597,6 +597,244 @@ Proof.
   rewrite dcl_sets_cm_code. rewrite Hpre. reflexivity.
 Qed.
 
+(* ============ The remaining instructions: pairs, ports, PROM ========= *)
+
+(** FIN loads the ROM byte addressed by pair 0, fetched from the page of
+    the next instruction, into the target pair. *)
+Lemma hoare_FIN : forall (r : nibble) (v : byte),
+  wval r mod 2 = 0 ->
+  {{ fun s => length (regs s) = 16 /\
+              fetch_byte s (page_of (wval (pc_inc1 s)) * 256
+                            + get_reg_pair s 0) = v }}
+     FIN r
+  {{ fun s => get_reg_pair s (wval r) = wval v }}.
+Proof.
+  intros r v Heven. hoare_start.
+  match goal with
+  | Hlen : length (regs s) = 16, Hf : fetch_byte s _ = v |- _ =>
+      cbn [execute];
+      replace (get_reg_pair
+                 (pc_bump 1 (set_reg_pair s (wval r)
+                    (wval (fetch_byte s (page_of (wval (pc_inc1 s)) * 256
+                                         + get_reg_pair s 0))))) (wval r))
+        with (get_reg_pair
+                (set_reg_pair s (wval r)
+                   (wval (fetch_byte s (page_of (wval (pc_inc1 s)) * 256
+                                        + get_reg_pair s 0)))) (wval r))
+        by reflexivity;
+      rewrite Hf;
+      apply set_reg_pair_get_pair;
+        [exact Hlen | apply nib_lt16 | exact Heven | apply byte_lt256]
+  end.
+Qed.
+
+(** JIN jumps within the page of the next instruction, low byte from the
+    register pair. *)
+Lemma hoare_JIN : forall (r : nibble) p p0,
+  {{ fun s => get_reg_pair s (wval r) = p /\ pcv s = p0 }}
+     JIN r
+  {{ fun s' => pc s' = adr (page_of ((p0 + 1) mod 4096) * 256 + p) }}.
+Proof.
+  intros r p p0. hoare_start.
+  match goal with
+  | Hp : get_reg_pair s (wval r) = p, H0 : pcv s = p0 |- _ =>
+      rewrite pc_shape_jin;
+      unfold pc_inc1; rewrite adr_val; rewrite H0, Hp; reflexivity
+  end.
+Qed.
+
+(** WRR writes the accumulator into the selected output-port latch. *)
+Lemma hoare_WRR : forall (v : nibble) k,
+  {{ fun s => acc s = v /\ wval (sel_rom s) = k }}
+     WRR
+  {{ fun s' => nth k (out_ports s') (nib 0) = v }}.
+Proof.
+  intros v k.
+  unfold hoare_triple. intros s HWF [Hacc Hsel].
+  split; [apply execute_preserves_WF; exact HWF |].
+  rewrite <- Hsel, <- Hacc.
+  apply wrr_writes_to_selected_port. exact HWF.
+Qed.
+
+(** RDR reads the selected port's pins: the latch on an output port, the
+    external drive on an input port. *)
+Lemma hoare_RDR : forall v : nibble,
+  {{ fun s => (if nth (wval (sel_rom s)) (port_dirs s) true
+               then nth (wval (sel_rom s)) (out_ports s) (nib 0)
+               else nth (wval (sel_rom s)) (in_ports s) (nib 0)) = v }}
+     RDR
+  {{ fun s' => acc s' = v }}.
+Proof.
+  intros v. hoare_start.
+  rewrite rdr_reads_selected_port. exact Hpre.
+Qed.
+
+(** WMP drives the selected chip's port in every bank the DCL code
+    addresses. *)
+Lemma hoare_WMP : forall (v : nibble) b,
+  {{ fun s => acc s = v /\ In b (sel_lines s) }}
+     WMP
+  {{ fun s' => read_port_bank (ram_sys s') (sel_ram s') b = v }}.
+Proof.
+  intros v b.
+  unfold hoare_triple. intros s HWF [Hacc Hin].
+  split; [apply execute_preserves_WF; exact HWF |].
+  replace (sel_ram (execute s WMP)) with (sel_ram s) by reflexivity.
+  rewrite <- Hacc.
+  apply wmp_writes_selected_ports; assumption.
+Qed.
+
+(** An armed WPM with the latch expecting the high half stages the
+    accumulator; ROM is untouched. *)
+Lemma hoare_WPM_stage : forall (v : nibble) (romv : list byte),
+  {{ fun s => acc s = v /\ rom s = romv /\
+              prom_enable s = true /\ pl_expect_low (prom_latch s) = false }}
+     WPM
+  {{ fun s' => prom_latch s' = mkProgLatch true v /\ rom s' = romv }}.
+Proof.
+  intros v romv.
+  unfold hoare_triple. intros s HWF (Hacc & Hrom & He & Hl).
+  split; [apply execute_preserves_WF; exact HWF |].
+  rewrite (wpm_stage s He Hl).
+  split.
+  - rewrite Hacc. reflexivity.
+  - exact Hrom.
+Qed.
+
+(** An armed WPM with a staged high half commits the assembled byte at the
+    programmer's address and returns the latch to its initial state. *)
+Lemma hoare_WPM_commit : forall (hi lo : nibble) (a : addr12) (romv : list byte),
+  {{ fun s => acc s = lo /\ prom_enable s = true /\
+              prom_latch s = mkProgLatch true hi /\
+              prom_addr s = a /\ rom s = romv }}
+     WPM
+  {{ fun s' => rom s' = update_nth (wval a) (byt (wval hi * 16 + wval lo)) romv /\
+               prom_latch s' = latch_init }}.
+Proof.
+  intros hi lo a romv.
+  unfold hoare_triple. intros s HWF (Hacc & He & Hl & Ha & Hr).
+  split; [apply execute_preserves_WF; exact HWF |].
+  assert (Hexp : pl_expect_low (prom_latch s) = true)
+    by (rewrite Hl; reflexivity).
+  rewrite (wpm_commit s He Hexp).
+  split.
+  - replace (rom (pc_bump 1 (with_prom_latch latch_init
+               (with_rom (update_nth (wval (prom_addr s))
+                  (byt (wval (pl_hi (prom_latch s)) * 16 + aval s)) (rom s)) s))))
+      with (update_nth (wval (prom_addr s))
+              (byt (wval (pl_hi (prom_latch s)) * 16 + aval s)) (rom s))
+      by reflexivity.
+    rewrite Hl, Ha, Hr. unfold aval. rewrite Hacc. reflexivity.
+  - reflexivity.
+Qed.
+
+(** A disarmed WPM is a no-op on ROM and the staging latch. *)
+Lemma hoare_WPM_disabled : forall (romv : list byte) (pl : ProgLatch),
+  {{ fun s => prom_enable s = false /\ rom s = romv /\ prom_latch s = pl }}
+     WPM
+  {{ fun s' => rom s' = romv /\ prom_latch s' = pl }}.
+Proof.
+  intros romv pl.
+  unfold hoare_triple. intros s HWF (He & Hr & Hl).
+  split; [apply execute_preserves_WF; exact HWF |].
+  rewrite (wpm_disabled_is_nop s He).
+  split; [exact Hr | exact Hl].
+Qed.
+
+(** WRs idx writes the accumulator into status character idx of every
+    selected bank: the status read at idx becomes defined with that value. *)
+Lemma hoare_WRs_writes : forall idx (v : nibble),
+  idx < 4 ->
+  {{ fun s => acc s = v }}
+     WRs idx
+  {{ fun s' => ram_read_stat_opt s' idx = Some v }}.
+Proof.
+  intros idx v Hidx.
+  unfold hoare_triple. intros s HWF Hacc.
+  split; [apply execute_preserves_WF; exact HWF |].
+  rewrite <- Hacc.
+  apply wrs_write_defined; assumption.
+Qed.
+
+Corollary hoare_WR0_writes : forall v : nibble,
+  {{ fun s => acc s = v }} WR0 {{ fun s' => ram_read_stat_opt s' 0 = Some v }}.
+Proof. intro v. exact (hoare_WRs_writes 0 v ltac:(lia)). Qed.
+
+Corollary hoare_WR1_writes : forall v : nibble,
+  {{ fun s => acc s = v }} WR1 {{ fun s' => ram_read_stat_opt s' 1 = Some v }}.
+Proof. intro v. exact (hoare_WRs_writes 1 v ltac:(lia)). Qed.
+
+Corollary hoare_WR2_writes : forall v : nibble,
+  {{ fun s => acc s = v }} WR2 {{ fun s' => ram_read_stat_opt s' 2 = Some v }}.
+Proof. intro v. exact (hoare_WRs_writes 2 v ltac:(lia)). Qed.
+
+Corollary hoare_WR3_writes : forall v : nibble,
+  {{ fun s => acc s = v }} WR3 {{ fun s' => ram_read_stat_opt s' 3 = Some v }}.
+Proof. intro v. exact (hoare_WRs_writes 3 v ltac:(lia)). Qed.
+
+(** RDs idx loads status character idx into the accumulator. *)
+Lemma hoare_RDs_value : forall idx (v : nibble),
+  idx < 4 ->
+  {{ fun s => ram_read_stat s idx = v }}
+     RDs idx
+  {{ fun s' => acc s' = v }}.
+Proof.
+  intros idx v Hidx.
+  unfold hoare_triple. intros s HWF Hpre.
+  split; [apply execute_preserves_WF; exact HWF |].
+  rewrite rds_reads_stat by exact Hidx. exact Hpre.
+Qed.
+
+Corollary hoare_RD0_value : forall v : nibble,
+  {{ fun s => ram_read_stat s 0 = v }} RD0 {{ fun s' => acc s' = v }}.
+Proof. intro v. exact (hoare_RDs_value 0 v ltac:(lia)). Qed.
+
+Corollary hoare_RD1_value : forall v : nibble,
+  {{ fun s => ram_read_stat s 1 = v }} RD1 {{ fun s' => acc s' = v }}.
+Proof. intro v. exact (hoare_RDs_value 1 v ltac:(lia)). Qed.
+
+Corollary hoare_RD2_value : forall v : nibble,
+  {{ fun s => ram_read_stat s 2 = v }} RD2 {{ fun s' => acc s' = v }}.
+Proof. intro v. exact (hoare_RDs_value 2 v ltac:(lia)). Qed.
+
+Corollary hoare_RD3_value : forall v : nibble,
+  {{ fun s => ram_read_stat s 3 = v }} RD3 {{ fun s' => acc s' = v }}.
+Proof. intro v. exact (hoare_RDs_value 3 v ltac:(lia)). Qed.
+
+(** ADM: add the selected RAM character with carry. *)
+Lemma hoare_ADM_value : forall a m c,
+  {{ fun s => aval s = a /\ wval (ram_read_main s) = m /\ carry s = c }}
+     ADM
+  {{ fun s' => aval s' = (a + m + (if c then 1 else 0)) mod 16 /\
+               carry s' = (16 <=? a + m + (if c then 1 else 0)) }}.
+Proof.
+  intros a m c. hoare_start.
+  destruct (adm_computes_sum s) as [Ha Hc].
+  unfold cbit in Ha, Hc.
+  match goal with
+  | H1 : aval s = a, H2 : wval (ram_read_main s) = m, H3 : carry s = c |- _ =>
+      rewrite H1, H2, H3 in Ha, Hc
+  end.
+  split; assumption.
+Qed.
+
+(** SBM: subtract the selected RAM character with borrow. *)
+Lemma hoare_SBM_value : forall a m c,
+  {{ fun s => aval s = a /\ wval (ram_read_main s) = m /\ carry s = c }}
+     SBM
+  {{ fun s' => aval s' = (a + 16 - m - (if c then 1 else 0)) mod 16 /\
+               carry s' = (16 <=? a + 16 - m - (if c then 1 else 0)) }}.
+Proof.
+  intros a m c. hoare_start.
+  destruct (sbm_computes_difference s) as [Ha Hc].
+  unfold cbit in Ha, Hc.
+  match goal with
+  | H1 : aval s = a, H2 : wval (ram_read_main s) = m, H3 : carry s = c |- _ =>
+      rewrite H1, H2, H3 in Ha, Hc
+  end.
+  split; assumption.
+Qed.
+
 (* ==================== Program-Level Hoare Logic ================== *)
 
 Definition hoare_prog (P Q : Intel4004State -> Prop) (prog : list Instruction) : Prop :=

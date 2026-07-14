@@ -2060,6 +2060,123 @@ Proof.
       * apply write_stat_bank_WF; assumption.
 Qed.
 
+(** Port-write analogues: the written port, and untouched banks. *)
+Definition read_port_bank (sys : list RAMBank) (sel : RAMSel) (b : nat) : nibble :=
+  chip_port (get_chip (get_bank_sys sys b) (wval (sel_chip sel))).
+
+Lemma write_port_bank_bank : forall sys sel b v,
+  b < length sys ->
+  get_bank_sys (write_port_bank sys sel b v) b
+  = upd_chip_in_bank (get_bank_sys sys b) (wval (sel_chip sel))
+      (upd_port_in_chip (get_chip (get_bank_sys sys b) (wval (sel_chip sel))) v).
+Proof.
+  intros sys sel b v Hb.
+  unfold write_port_bank. cbv zeta.
+  unfold get_bank_sys at 1.
+  apply nth_update_nth_eq. exact Hb.
+Qed.
+
+Lemma write_port_bank_other : forall sys sel b b' v,
+  b' <> b ->
+  get_bank_sys (write_port_bank sys sel b v) b' = get_bank_sys sys b'.
+Proof.
+  intros sys sel b b' v Hne.
+  unfold write_port_bank, get_bank_sys. cbv zeta.
+  apply nth_update_nth_neq. exact Hne.
+Qed.
+
+Lemma write_port_banks_other : forall bs sys sel b' v,
+  ~ In b' bs ->
+  get_bank_sys (write_port_banks sys sel bs v) b' = get_bank_sys sys b'.
+Proof.
+  induction bs as [|b rest IH]; intros sys sel b' v Hnin; cbn [write_port_banks].
+  - reflexivity.
+  - rewrite IH by (intro Hin; apply Hnin; right; exact Hin).
+    apply write_port_bank_other.
+    intro Heq. apply Hnin. left. congruence.
+Qed.
+
+Lemma read_after_port_banks_other : forall bs sys sel b v,
+  ~ In b bs ->
+  read_port_bank (write_port_banks sys sel bs v) sel b = read_port_bank sys sel b.
+Proof.
+  intros bs sys sel b v Hnin. unfold read_port_bank.
+  rewrite write_port_banks_other by exact Hnin. reflexivity.
+Qed.
+
+Lemma write_port_bank_hit : forall sys sel b v,
+  b < length sys ->
+  Forall WF_bank sys ->
+  read_port_bank (write_port_bank sys sel b v) sel b = v.
+Proof.
+  intros sys sel b v Hb Hall.
+  pose proof (WF_bank_from_sys sys b Hall) as Hbk.
+  unfold read_port_bank.
+  rewrite write_port_bank_bank by exact Hb.
+  rewrite get_chip_upd_chip_in_bank
+    by (destruct Hbk as [Hl _]; rewrite Hl;
+        pose proof (w2_lt4 (sel_chip sel)); unfold NCHIPS; lia).
+  reflexivity.
+Qed.
+
+(** Every bank in a duplicate-free line set exposes the written port value. *)
+Lemma write_port_banks_hit : forall bs sys sel v b,
+  NoDup bs ->
+  In b bs ->
+  Forall (fun x => x < length sys) bs ->
+  Forall WF_bank sys ->
+  read_port_bank (write_port_banks sys sel bs v) sel b = v.
+Proof.
+  induction bs as [|bh rest IH]; intros sys sel v b Hnd Hin Hlen Hall.
+  - destruct Hin.
+  - inversion Hnd as [|? ? Hnin Hnd']; subst.
+    inversion Hlen as [|? ? Hbh Hlen']; subst.
+    cbn [write_port_banks].
+    destruct Hin as [Heq | Hin].
+    + subst bh.
+      rewrite read_after_port_banks_other by exact Hnin.
+      apply write_port_bank_hit; assumption.
+    + apply IH; try assumption.
+      * eapply Forall_impl; [| exact Hlen'].
+        intros x Hx. rewrite write_port_bank_length. exact Hx.
+      * apply write_port_bank_WF; assumption.
+Qed.
+
+(** Port writes never touch the character arrays: every chip's register
+    list is preserved at every bank. *)
+Lemma write_port_bank_chip_regs : forall sys sel b v b' c,
+  Forall WF_bank sys ->
+  chip_regs (get_chip (get_bank_sys (write_port_bank sys sel b v) b') c)
+  = chip_regs (get_chip (get_bank_sys sys b') c).
+Proof.
+  intros sys sel b v b' c Hall.
+  destruct (Nat.eq_dec b' b) as [-> | Hne].
+  2:{ rewrite write_port_bank_other by exact Hne. reflexivity. }
+  destruct (Nat.lt_ge_cases b (length sys)) as [Hb | Hb].
+  2:{ unfold write_port_bank, get_bank_sys. cbv zeta.
+      rewrite update_nth_out_of_bounds by exact Hb. reflexivity. }
+  rewrite write_port_bank_bank by exact Hb.
+  pose proof (WF_bank_from_sys sys b Hall) as Hbk.
+  destruct (Nat.eq_dec c (wval (sel_chip sel))) as [-> | Hcne].
+  - rewrite get_chip_upd_chip_in_bank
+      by (destruct Hbk as [Hl _]; rewrite Hl;
+          pose proof (w2_lt4 (sel_chip sel)); unfold NCHIPS; lia).
+    reflexivity.
+  - rewrite get_chip_upd_chip_in_bank_neq by congruence.
+    reflexivity.
+Qed.
+
+Lemma write_port_banks_chip_regs : forall bs sys sel v b' c,
+  Forall WF_bank sys ->
+  chip_regs (get_chip (get_bank_sys (write_port_banks sys sel bs v) b') c)
+  = chip_regs (get_chip (get_bank_sys sys b') c).
+Proof.
+  induction bs as [|b rest IH]; intros sys sel v b' c Hall; cbn [write_port_banks].
+  - reflexivity.
+  - rewrite IH by (apply write_port_bank_WF; exact Hall).
+    apply write_port_bank_chip_regs. exact Hall.
+Qed.
+
 (** Agreement reads: a defined read means every selected bank drives it. *)
 Lemma agree_read_some : forall reads v,
   agree_read reads = Some v ->

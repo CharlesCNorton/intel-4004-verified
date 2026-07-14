@@ -119,6 +119,12 @@ Print Assumptions dcl_read_single_line.
 Print Assumptions ram_read_main_opt_none.
 Print Assumptions ram_read_main_defined.
 Print Assumptions wrm_then_rdm_reads_back.
+Print Assumptions wmp_writes_selected_ports.
+Print Assumptions wmp_frames_unselected_ports.
+Print Assumptions wmp_preserves_characters.
+Print Assumptions wrs_then_rds_reads_back.
+Print Assumptions adm_computes_sum.
+Print Assumptions sbm_computes_difference.
 
 (* ROM ports under mask-programmed directions *)
 Print Assumptions wrr_writes_to_selected_port.
@@ -162,6 +168,21 @@ Print Assumptions hoare_WRM_writes.
 Print Assumptions hoare_alu_value.
 Print Assumptions alu_matches_ref.
 Print Assumptions intel4004_transition_sound.
+
+(* Per-instruction Hoare coverage: pairs, ports, status, PROM, memory
+   operands *)
+Print Assumptions hoare_FIN.
+Print Assumptions hoare_JIN.
+Print Assumptions hoare_WRR.
+Print Assumptions hoare_RDR.
+Print Assumptions hoare_WMP.
+Print Assumptions hoare_WPM_stage.
+Print Assumptions hoare_WPM_commit.
+Print Assumptions hoare_WPM_disabled.
+Print Assumptions hoare_WRs_writes.
+Print Assumptions hoare_RDs_value.
+Print Assumptions hoare_ADM_value.
+Print Assumptions hoare_SBM_value.
 
 (* Separation logic over the RAM hierarchy *)
 Print Assumptions star_comm.

@@ -665,6 +665,152 @@ Proof.
   reflexivity.
 Qed.
 
+(* ==================== Multi-bank WMP port writes ==================== *)
+
+(* WMP drives the selected chip's output port in every bank the DCL code
+   addresses.  4002 ports are write-only at the ISA level (no instruction
+   reads them back), so these are the port-path analogues of the WRM
+   theorems, observed through the state. *)
+
+Theorem wmp_writes_selected_ports : forall s b,
+  WF s ->
+  In b (sel_lines s) ->
+  read_port_bank (ram_sys (execute s WMP)) (sel_ram s) b = acc s.
+Proof.
+  intros s b HWF Hin.
+  replace (ram_sys (execute s WMP))
+    with (write_port_banks (ram_sys s) (sel_ram s) (sel_lines s) (acc s))
+    by reflexivity.
+  apply write_port_banks_hit.
+  - apply sel_lines_NoDup.
+  - exact Hin.
+  - apply sel_lines_bounded. exact HWF.
+  - destruct_WF HWF. exact HsysFor.
+Qed.
+
+Theorem wmp_frames_unselected_ports : forall s b,
+  ~ In b (sel_lines s) ->
+  read_port_bank (ram_sys (execute s WMP)) (sel_ram s) b
+  = read_port_bank (ram_sys s) (sel_ram s) b.
+Proof.
+  intros s b Hnin.
+  replace (ram_sys (execute s WMP))
+    with (write_port_banks (ram_sys s) (sel_ram s) (sel_lines s) (acc s))
+    by reflexivity.
+  apply read_after_port_banks_other. exact Hnin.
+Qed.
+
+(** WMP touches no character: main and status memory read unchanged at
+    every address, selected banks included. *)
+Theorem wmp_preserves_characters : forall s b c r i,
+  WF s ->
+  get_main (get_regRAM (get_chip (get_bank (execute s WMP) b) c) r) i
+  = get_main (get_regRAM (get_chip (get_bank s b) c) r) i /\
+  get_stat (get_regRAM (get_chip (get_bank (execute s WMP) b) c) r) i
+  = get_stat (get_regRAM (get_chip (get_bank s b) c) r) i.
+Proof.
+  intros s b c r i HWF.
+  assert (Hcr : chip_regs (get_chip (get_bank (execute s WMP) b) c)
+                = chip_regs (get_chip (get_bank s b) c)).
+  { unfold get_bank.
+    replace (ram_sys (execute s WMP))
+      with (write_port_banks (ram_sys s) (sel_ram s) (sel_lines s) (acc s))
+      by reflexivity.
+    apply write_port_banks_chip_regs.
+    destruct_WF HWF. exact HsysFor. }
+  unfold get_regRAM. rewrite Hcr. split; reflexivity.
+Qed.
+
+(* ==================== Status writes read back (WR0-3 / RD0-3) ======== *)
+
+(** The four status characters as indexed instruction families. *)
+Definition WRs (idx : nat) : Instruction :=
+  match idx with 0 => WR0 | 1 => WR1 | 2 => WR2 | _ => WR3 end.
+
+Definition RDs (idx : nat) : Instruction :=
+  match idx with 0 => RD0 | 1 => RD1 | 2 => RD2 | _ => RD3 end.
+
+(** RDs idx loads status character idx into the accumulator. *)
+Lemma rds_reads_stat : forall s idx,
+  idx < 4 ->
+  acc (execute s (RDs idx)) = ram_read_stat s idx.
+Proof.
+  intros s idx Hidx.
+  destruct idx as [|[|[|[|k]]]]; try lia; reflexivity.
+Qed.
+
+(** The raw status write leaves the selected banks unanimous at its index. *)
+Lemma stat_write_read_defined : forall s idx,
+  idx < 4 ->
+  WF s ->
+  agree_read (map (read_stat_bank
+      (write_stat_banks (ram_sys s) (sel_ram s) idx (sel_lines s) (acc s))
+      (sel_ram s) idx) (sel_lines s)) = Some (acc s).
+Proof.
+  intros s idx Hidx HWF.
+  apply agree_read_all.
+  - intro Hmap. apply map_eq_nil in Hmap.
+    exact (sel_lines_nonempty s Hmap).
+  - intros x Hx. apply in_map_iff in Hx.
+    destruct Hx as (b & <- & Hb).
+    apply write_stat_banks_hit; try assumption.
+    + apply sel_lines_NoDup.
+    + apply sel_lines_bounded. exact HWF.
+    + destruct_WF HWF. exact HsysFor.
+Qed.
+
+(** After WRs idx, the status read at idx is defined and returns the
+    written value, at any DCL code. *)
+Theorem wrs_write_defined : forall s idx,
+  idx < 4 ->
+  WF s ->
+  ram_read_stat_opt (execute s (WRs idx)) idx = Some (acc s).
+Proof.
+  intros s idx Hidx HWF.
+  destruct idx as [|[|[|[|k]]]]; try lia; cbn [WRs].
+  - exact (stat_write_read_defined s 0 ltac:(lia) HWF).
+  - exact (stat_write_read_defined s 1 ltac:(lia) HWF).
+  - exact (stat_write_read_defined s 2 ltac:(lia) HWF).
+  - exact (stat_write_read_defined s 3 ltac:(lia) HWF).
+Qed.
+
+(** RDs after WRs reads back the accumulator, at any DCL code. *)
+Theorem wrs_then_rds_reads_back : forall s idx,
+  idx < 4 ->
+  WF s ->
+  acc (execute (execute s (WRs idx)) (RDs idx)) = acc s.
+Proof.
+  intros s idx Hidx HWF.
+  rewrite rds_reads_stat by exact Hidx.
+  unfold ram_read_stat.
+  rewrite (wrs_write_defined s idx Hidx HWF).
+  reflexivity.
+Qed.
+
+(* ==================== Memory-operand arithmetic ==================== *)
+
+(** ADM and SBM compute the ALU functions of ADD and SUB with the selected
+    RAM character as the operand. *)
+Theorem adm_computes_sum : forall s,
+  aval (execute s ADM) = (aval s + wval (ram_read_main s) + cbit s) mod 16 /\
+  carry (execute s ADM) = (16 <=? aval s + wval (ram_read_main s) + cbit s).
+Proof.
+  intros s. split; exec_simpl.
+  - apply nib_val.
+  - reflexivity.
+Qed.
+
+Theorem sbm_computes_difference : forall s,
+  aval (execute s SBM)
+  = (aval s + 16 - wval (ram_read_main s) - cbit s) mod 16 /\
+  carry (execute s SBM)
+  = (16 <=? aval s + 16 - wval (ram_read_main s) - cbit s).
+Proof.
+  intros s. split; exec_simpl.
+  - apply nib_val.
+  - reflexivity.
+Qed.
+
 (* ==================== ROM I/O Port Operations ==================== *)
 
 Lemma src_sets_rom_selection : forall s (r : nibble),
