@@ -181,11 +181,16 @@ Theorem bbl_reads_stale_row : forall s (d : nibble),
   pc (execute s (BBL d)) = stk1 s.
 Proof. reflexivity. Qed.
 
-(** Four consecutive returns rotate the ring back to where it started. *)
-Theorem four_returns_close_the_ring : forall s (d1 d2 d3 d4 : nibble),
+(** Four consecutive returns rotate the ring fully around: every row
+    comes back one byte on, because each return's fetch incremented the
+    row it then abandoned. *)
+Theorem four_returns_advance_the_ring : forall s (d1 d2 d3 d4 : nibble),
   let s4 := execute (execute (execute (execute s (BBL d1)) (BBL d2))
                        (BBL d3)) (BBL d4) in
-  pc s4 = pc s /\ stk1 s4 = stk1 s /\ stk2 s4 = stk2 s /\ stk3 s4 = stk3 s.
+  pc s4 = adr (pcv s + 1) /\
+  stk1 s4 = adr (wval (stk1 s) + 1) /\
+  stk2 s4 = adr (wval (stk2 s) + 1) /\
+  stk3 s4 = adr (wval (stk3 s) + 1).
 Proof. intros. repeat split. Qed.
 
 (* ==================== Port-direction read-back caveat ==================== *)

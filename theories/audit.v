@@ -36,7 +36,7 @@ Definition ramv (s : Intel4004State) : nat := wval (ram_read_main s).
 Set Extraction Output Directory ".".
 
 Extraction "intel4004_model.ml"
-  decode encode execute cycles test_state mk_state
+  decode encode execute step cycles dcl_lines cm_code test_state mk_state
   aval carry pcv rval stkv1 stkv2 stkv3 ramv.
 
 (* Core correctness and safety theorems *)
@@ -101,7 +101,7 @@ Print Assumptions jms_bbl_roundtrip.
 Print Assumptions jms_discards_oldest.
 Print Assumptions bbl_underflow_from_reset.
 Print Assumptions bbl_reads_stale_row.
-Print Assumptions four_returns_close_the_ring.
+Print Assumptions four_returns_advance_the_ring.
 Print Assumptions rotating_ring_complete.
 Print Assumptions ring_tracks_jms.
 Print Assumptions ring_tracks_bbl.

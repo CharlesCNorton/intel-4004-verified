@@ -324,8 +324,9 @@ let test_fin () =
 (* ========= Test 9: the JMS/BBL address ring ========= *)
 (* Reference: the ring in pointer-relative coordinates (the PC and three
    saved rows).  CALL rotates the return address in and discards the oldest
-   row; RET resumes the first saved row and rotates the vacated PC to the
-   back, so returns past the ring's depth walk the stale rows. *)
+   row; RET resumes the first saved row and abandons the vacated row with
+   its fetch-incremented value (return address + 1), so returns past the
+   ring's depth walk the stale rows one byte on. *)
 let test_stack () =
   section "stack";
   let scenarios = [ [100; 500; 1000; 2000];
@@ -352,8 +353,9 @@ let test_stack () =
       check (Printf.sprintf "JMS %d" a)) addrs;
     for d = 1 to 6 do
       s := execute !s (BBL d);
-      let old_pc = !rpc in
-      rpc := !r1; r1 := !r2; r2 := !r3; r3 := old_pc;
+      (* the vacated row keeps its fetch-incremented value *)
+      let stale = (!rpc + 1) mod 4096 in
+      rpc := !r1; r1 := !r2; r2 := !r3; r3 := stale;
       incr checks;
       if aval !s <> d then begin
         incr fails;

@@ -1337,12 +1337,14 @@ Proof. reflexivity. Qed.
 
 (** The exact field motion of RET: the first saved row resumes as the PC,
     the rows shift forward, and the vacated current row reappears as the
-    stale third row. *)
+    stale third row holding the address one past the return (the row was
+    incremented during the return's own fetch and abandoned without a
+    write-back). *)
 Theorem bbl_ring_motion : forall s (d : nibble),
   pc (execute s (BBL d)) = stk1 s /\
   stk1 (execute s (BBL d)) = stk2 s /\
   stk2 (execute s (BBL d)) = stk3 s /\
-  stk3 (execute s (BBL d)) = pc s /\
+  stk3 (execute s (BBL d)) = adr (pcv s + 1) /\
   acc (execute s (BBL d)) = d.
 Proof. intros s d. repeat split. Qed.
 
@@ -2677,9 +2679,13 @@ Definition ring_call (rg : Ring) (ret target : addr12) : Ring :=
   let p' := (p + 1) mod 4 in
   mkRing (update_nth p' target (update_nth p ret (ring_slots rg))) p'.
 
-(** RET: back the pointer up; that row resumes as the PC. *)
+(** RET: the current row is left holding its fetch-incremented value and
+    the pointer backs up; that row resumes as the PC. *)
 Definition ring_ret (rg : Ring) : Ring :=
-  mkRing (ring_slots rg) ((ring_ptr rg + 3) mod 4).
+  mkRing (update_nth (ring_ptr rg)
+            (adr (wval (nth (ring_ptr rg) (ring_slots rg) (adr 0)) + 1))
+            (ring_slots rg))
+         ((ring_ptr rg + 3) mod 4).
 
 (** Correspondence: the machine's pointer-relative rows are the ring's rows
     read backwards from the pointer. *)
@@ -2729,15 +2735,23 @@ Proof.
     cbn [length] in Hlen; try lia.
   destruct ptr as [|[|[|[|junkp]]]]; try lia;
     unfold ring_matches, ring_wf, ring_pc, ring_ret;
-    cbn in *; repeat split; (congruence || lia).
+    cbn in *; subst; repeat split; (reflexivity || lia).
 Qed.
 
 (** Underflow has a definite hardware meaning: RET on the ring resumes the
-    stale row one position behind the pointer, and the machine's BBL agrees. *)
+    stale row one position behind the pointer (untouched by the write-back
+    to the vacated row), and the machine's BBL agrees. *)
 Theorem ring_underflow_resumes_stale : forall rg,
   ring_pc (ring_ret rg)
   = nth ((ring_ptr rg + 3) mod 4) (ring_slots rg) (adr 0).
-Proof. intros rg. reflexivity. Qed.
+Proof.
+  intros rg. unfold ring_pc, ring_ret. cbn [ring_slots ring_ptr].
+  apply nth_update_nth_neq.
+  remember (ring_ptr rg) as n eqn:En.
+  intro Heq.
+  pose proof (Nat.mod_upper_bound (n + 3) 4 ltac:(lia)) as Hub.
+  destruct n as [|[|[|[|k]]]]; cbn in Heq, Hub; lia.
+Qed.
 
 Corollary ring_underflow_agrees : forall rg s (d : nibble),
   ring_matches rg s ->

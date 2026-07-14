@@ -1,0 +1,11 @@
+# The mask-derived netlist is fetched on demand under a non-commercial
+# license (see README.md) and must never be committed here.
+lajos-4004-layout-netlist.txt
+
+# Generated ROM images, expected traces, and simulation output.
+build/
+
+# Local scratch and Python caches.
+*.pyc
+__pycache__/
+probe.csv

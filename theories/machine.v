@@ -564,11 +564,15 @@ Definition ring_push (ret target : addr12) (s : Intel4004State) : Intel4004State
           (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_enable s) (prom_latch s).
 
 (** RET: the pointer backs up and that row resumes as the PC.  The vacated
-    current row keeps its contents and reappears three positions behind the
-    new pointer, so returning past the ring's depth resumes a stale row,
-    matching the hardware's underflow behavior. *)
+    current row reappears three positions behind the new pointer holding
+    the address one past the return instruction: the row was incremented
+    during the return's own fetch and the rotation abandons it without a
+    write-back.  Returning past the ring's depth therefore resumes a
+    stale row holding that incremented address (validated against the
+    transistor netlist captured from the 4004's masks). *)
 Definition ring_pop (s : Intel4004State) : Intel4004State :=
-  mkState (acc s) (regs s) (carry s) (stk1 s) (stk2 s) (stk3 s) (pc s) (ram_sys s)
+  mkState (acc s) (regs s) (carry s) (stk1 s) (stk2 s) (stk3 s)
+          (adr (pcv s + 1)) (ram_sys s)
           (cm_code s) (sel_ram s) (out_ports s) (in_ports s) (port_dirs s)
           (sel_rom s) (rom s) (test_pin s) (prom_addr s) (prom_enable s) (prom_latch s).
 
